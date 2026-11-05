@@ -199,6 +199,13 @@ function BoardWidget:getSize()
     return Geom:new{ w = self.dimen.w, h = self.dimen.h }
 end
 
+--- Where the player's dice are painted (once the board has been painted).
+function BoardWidget:diceRegion()
+    local u = self.unit
+    return Geom:new{ x = self.dimen.x + (BAR_COL + 1) * u, y = self.dimen.y + self.label_h + 5 * u,
+        w = BAR_COL * u, h = u }
+end
+
 function BoardWidget:onTapBoard(_args, ges)
     local u = self.unit
     local col = math.floor((ges.pos.x - self.dimen.x) / u)
@@ -390,8 +397,6 @@ function GameScreen:statusText()
         else
             lines[#lines + 1] = _("Connecting…")
         end
-    elseif self.rolling then
-        lines[#lines + 1] = _("Rolling…")
     elseif m.phase == "opening" then
         if m.peer_open then lines[#lines + 1] = T(_("%1 rolled %2."), m.peer, m.peer_open) end
         if m:needs_opening_roll() then
@@ -437,7 +442,7 @@ function GameScreen:buttonRow()
     if game.lost then return { close } end
     if m:needs_roll() or m:needs_opening_roll() then
         return {
-            { text = _("Roll"), enabled = not self.rolling, callback = function() self:rollDice() end },
+            { text = _("Roll"), callback = function() self:rollDice() end },
         }
     elseif m:my_turn() then
         return {
@@ -632,15 +637,12 @@ function GameScreen:rollDice()
             return
         end
         self.rolling = opening and { math.random(6) } or { math.random(6), math.random(6) }
-        if frame == 1 then
-            self:update() -- status and buttons change too
-        else
-            -- the board doesn't move (see build()): refresh just its old place, quickly
-            local region = self.board.dimen
-            region = Geom:new{ x = region.x, y = region.y, w = region.w, h = region.h }
-            self:build()
-            UIManager:setDirty(self, "fast", region)
-        end
+        -- Only the dice change while rolling (the status and the buttons stay), and
+        -- the board doesn't move (see build()): refresh just the strip of the dice,
+        -- black and white only, so the quick "fast" mode doesn't flash anything else.
+        local region = self.board:diceRegion()
+        self:build()
+        UIManager:setDirty(self, "fast", region)
         UIManager:scheduleIn(ROLL_FRAME_TIME, step)
     end
     step()

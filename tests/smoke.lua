@@ -314,14 +314,23 @@ if gd > hd then
     tick()
     eq(client.sent:match("ROLL"), nil, "the host's dice wait for a roll")
     eq(status_of(screen):match("^Guest played .*\nYour turn: tap Roll") ~= nil, true, "guest's moves shown: " .. status_of(screen))
-    eq(buttons(screen).Roll.enabled, true, "Roll button")
+    eq(buttons(screen).Roll ~= nil, true, "Roll button")
     paint(screen.board)
+    local status_before, dirty_before = status_of(screen), #dirty
     screen.board.on_tap(5) -- a tap on the board rolls too
-    eq(status_of(screen):match("Rolling…") ~= nil, true, "rolling")
-    eq(buttons(screen).Roll.enabled, false, "no second roll while rolling")
+    screen.board.on_tap(5) -- ignored while rolling
+    buttons(screen).Roll.callback() -- this too
+    eq(status_of(screen), status_before, "the status stays while rolling")
     eq(#screen.board.dice.mine.values, 2, "rolling dice shown")
+    local u = screen.board.unit
     eq(animate(), 6, "a few animation frames")
-    eq(dirty[#dirty - 1].kind .. " " .. dirty[#dirty - 1].region.h, "fast " .. screen.board.dimen.h, "frames refresh the board quickly")
+    local only_dice = true
+    for i = dirty_before + 1, #dirty - 1 do -- the last one is the result
+        local r = dirty[i].region
+        if dirty[i].kind ~= "fast" or not r or r.h ~= u or r.w ~= 6 * u then only_dice = false end
+    end
+    eq(#dirty - 1 - dirty_before .. " " .. tostring(only_dice), "6 true", "frames refresh just the dice strip, quickly")
+    eq(dirty[#dirty].kind .. tostring(dirty[#dirty].region), "uinil", "the result refreshes the screen")
     eq(client.sent:match("ROLL %d %d\n$") ~= nil, true, "ROLL sent after the animation")
     eq(buttons(screen).Done ~= nil, true, "then the dice are played")
 end

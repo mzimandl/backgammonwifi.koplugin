@@ -67,7 +67,6 @@ Obě zařízení musí být ve stejné síti Wi-Fi. Jeden hráč hru založí, d
     ["Opening roll: tap Roll or the board. The higher die starts."] = "Úvodní hod: klepněte na Hodit nebo na desku. Začíná vyšší kostka.",
     ["You rolled %1. Waiting for %2…"] = "Hodili jste %1. Čeká se na hráče %2…",
     ["Both rolled %1: roll again."] = "Oba hody jsou %1: házejte znovu.",
-    ["Rolling…"] = "Hází se…",
     ["Your turn: tap Roll or the board to roll the dice."] = "Jste na tahu: hoďte kostkami tlačítkem Hodit nebo klepnutím na desku.",
     ["Done"] = "Hotovo",
     ["Play again"] = "Hrát znovu",
