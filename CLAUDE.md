@@ -1,0 +1,22 @@
+# KOReader Backgammon
+- Repo root is the plugin folder (backgammon.koplugin). Built like battleships.koplugin (same protocol layer, net.lua, l10n.lua, menu and game screen structure); a fix in one of the shared parts usually belongs in both.
+- Pure-Lua modules in backgammon/ must not require KOReader modules (testable off-device); net.lua gets LuaSocket passed in.
+- Only main.lua touches KOReader APIs. Verify API names against koreader/koreader source before using them.
+- LuaJIT 2.1 / Lua 5.1: no utf8 library, no goto.
+- Tests: `luajit tests/run.lua` (rules, protocol, two Match instances wired together playing random games, net with fake sockets, translations) and `luajit tests/smoke.lua` (main.lua against stubbed KOReader modules and a fake `socket`) must pass before finishing any change (`lua5.1` works too). The smoke test's dice decide who starts: run it with a few `SEED=n` values. smoke.lua finds menu items by their `backgammon_item` field.
+- Translations: main.lua's `_` (backgammon/l10n.lua) looks up backgammon/l10n/<lang>.lua first. Every new `_("…")` needs an entry in backgammon/l10n/cs.lua (run.lua checks both ways); _meta.lua keeps its Czech inline. Czech texts avoid past-tense verbs with a player name (gender unknown): "%1 odchází", "Vyhrává %1", "%1 táhne".
+- Distributed through ZenPM from mzimandl/koplugins (manifest.json, installs the master branch zip). ZenPM offers an update only when `version` in _meta.lua grows: bump it for every change that should reach devices. A push to master that changes _meta.lua asks koplugins to sync at once (.github/workflows/notify-koplugins.yml, secret KOPLUGINS_TOKEN).
+- Own modules must be required at load time from main.lua (PluginLoader only adds the plugin folder to package.path while main.lua loads).
+
+## Modules
+- rules.lua: position { points[1..24] (> 0 white, < 0 black), bar, off }; functions take points from one colour's side ("rel": 24..1 in moving order, 25 = bar, 0 = off; white rel = point, black rel = 25 - point). target() is the single-move rule (bar first, blocked points, bearing off with a higher die only from the highest point). Turn (Rules.turn) enforces using as many dice as possible and the larger-die rule: moves() lists only moves after which the rest of the maximum can still be played; play()/undo()/done()/encode().
+- protocol.lua: line format (documented at its top), Buffer for partial TCP reads, address parsing, discovery messages, ports.
+- match.lua: state machine (phases waiting → playing → over, rematch back to playing). Host = white, guest = black. The host sends START with the opening dice right after HELLO; then the player whose turn begins rolls and sends ROLL, and the mover sends MOVE from/die… which the other side replays through a Turn (an illegal or incomplete move is a protocol error). receive(line) → event | nil | nil, error; local actions play()/undo()/finish_turn()/request_rematch(). Unknown commands are ignored; changing the meaning of existing ones needs Protocol.VERSION + 1.
+- net.lua: non-blocking Conn, Host (TCP listener + UDP discovery answers), Search (DISCOVER broadcasts, games list with expiry). Same as battleships.
+
+## main.lua
+- State is module-level (`game`, `finder`), not on `self`: KOReader makes a new plugin instance for every reader/file manager.
+- Sockets are polled from UIManager ZMQs (poller(): waitEvent() runs every ~50 ms and must return nil). preventStandby() while a game runs; onSuspend/onExit end the game and the search.
+- GameScreen rebuilds its whole widget tree on every update() (build()); status text comes from the match state plus `game.message` (last event). BoardWidget paints the board itself (Blitbuffer paintRect/paintCircle/paintBorder; triangles as 1px rects) on a 14-unit grid: columns 0-5 and 7-12 points, 6 bar, 13 borne-off tray; point_place()/place_point() map the player's points to columns both ways (used for painting and taps).
+- Host: a device leaving before any game was played frees the seat (Match:drop_peer()); a second guest while one is connected gets ERROR busy. Once a game started any loss ends it (`game.lost`).
+- Kindle: iptables rules opened per role (host_rules / guest_rules / search_rules) and removed with the same list.
