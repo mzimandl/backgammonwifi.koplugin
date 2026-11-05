@@ -1,9 +1,9 @@
-# Backgammon for KOReader
+# Backgammon (Wi-Fi) for KOReader
 
-Backgammon for two players, each on their own e-reader, over Wi-Fi. English, with a Czech translation (Vrchcáby).
+Backgammon for two players, each on their own e-reader, over Wi-Fi. English, with a Czech translation (Vrchcáby). Not to be confused with [backgammon.koplugin](https://github.com/EmirErtorer/backgammon.koplugin), a game against the computer; this one is played between two readers and installs as `backgammonwifi`.
 
 ## Playing
-Both devices must be on the same Wi-Fi network. In the menu: **Tools → Backgammon**.
+Both devices must be on the same Wi-Fi network. In the menu: **Tools → Backgammon (Wi-Fi)**.
 
 - **Host a game**: one player opens a game. The screen shows the device's address.
 - **Find a game**: the other player sees games open on the local network (UDP broadcast) and taps one to join.

@@ -8,11 +8,11 @@ address or by finding it on the local network (UDP broadcast).
 
 -- Own modules must be required at load time: PluginLoader only adds the
 -- plugin folder to package.path while main.lua is being loaded.
-local L10n = require("backgammon/l10n")
-local Match = require("backgammon/match")
-local Net = require("backgammon/net")
-local Protocol = require("backgammon/protocol")
-local Rules = require("backgammon/rules")
+local L10n = require("backgammonwifi/l10n")
+local Match = require("backgammonwifi/match")
+local Net = require("backgammonwifi/net")
+local Protocol = require("backgammonwifi/protocol")
+local Rules = require("backgammonwifi/rules")
 
 local Blitbuffer = require("ffi/blitbuffer")
 local ButtonTable = require("ui/widget/buttontable")
@@ -43,15 +43,15 @@ local logger = require("logger")
 local time = require("ui/time")
 local gettext = require("gettext")
 -- The plugin's strings are not in KOReader's catalog: its own catalog for
--- KOReader's language first (backgammon/l10n/<lang>.lua, required now, see above).
+-- KOReader's language first (backgammonwifi/l10n/<lang>.lua, required now, see above).
 local _ = L10n.wrap(gettext, L10n.catalog(gettext.current_lang, function(name)
-    local ok, catalog = pcall(require, "backgammon/l10n/" .. name)
+    local ok, catalog = pcall(require, "backgammonwifi/l10n/" .. name)
     return ok and catalog or nil
 end))
 local T = require("ffi/util").template
 
 local Backgammon = WidgetContainer:extend{
-    name = "backgammon",
+    name = "backgammonwifi",
     is_doc_only = false,
 }
 
@@ -645,7 +645,7 @@ local function moves_text(moves)
     return table.concat(out, " ")
 end
 
---- Updates the screen after a match event (see backgammon/match.lua).
+--- Updates the screen after a match event (see backgammonwifi/match.lua).
 function Backgammon.onGameEvent(ev)
     local m = game.match
     local t = ev.type
@@ -879,7 +879,7 @@ end
 -- Plugin -----------------------------------------------------------------------
 
 function Backgammon:init()
-    self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/backgammon.lua")
+    self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/backgammonwifi.lua")
     self.ui.menu:registerToMainMenu(self)
 end
 
@@ -924,21 +924,21 @@ end
 
 function Backgammon:mainMenu()
     return {
-        { text = _("Host a game"), backgammon_item = "host", callback = function() self:hostGame() end },
-        { text = _("Find a game"), backgammon_item = "find", callback = function() self:findGames() end },
-        { text = _("Join by address…"), backgammon_item = "join", callback = function() self:joinByAddress() end,
+        { text = _("Host a game"), backgammonwifi_item = "host", callback = function() self:hostGame() end },
+        { text = _("Find a game"), backgammonwifi_item = "find", callback = function() self:findGames() end },
+        { text = _("Join by address…"), backgammonwifi_item = "join", callback = function() self:joinByAddress() end,
             separator = true },
-        { text_func = function() return T(_("Your name: %1"), self:playerName()) end, backgammon_item = "name",
+        { text_func = function() return T(_("Your name: %1"), self:playerName()) end, backgammonwifi_item = "name",
             keep_menu_open = true,
             callback = function(touchmenu_instance) self:editName(touchmenu_instance) end },
-        { text = _("Rules"), backgammon_item = "rules", keep_menu_open = true,
+        { text = _("Rules"), backgammonwifi_item = "rules", keep_menu_open = true,
             callback = function() self:showRules() end },
     }
 end
 
 function Backgammon:addToMainMenu(menu_items)
-    menu_items.backgammon = {
-        text = _("Backgammon"),
+    menu_items.backgammonwifi = {
+        text = _("Backgammon (Wi-Fi)"),
         sorting_hint = "tools",
         sub_item_table_func = function() return self:mainMenu() end,
     }

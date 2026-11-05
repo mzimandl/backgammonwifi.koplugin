@@ -15,8 +15,8 @@ Events: joined, start, rolled (the opponent's dice), moved (the opponent's
 moves; my turn begins), played (my turn ended), rematch_request, rematch, left.
 ]]
 
-local Protocol = require("backgammon/protocol")
-local Rules = require("backgammon/rules")
+local Protocol = require("backgammonwifi/protocol")
+local Rules = require("backgammonwifi/rules")
 
 local M = {}
 

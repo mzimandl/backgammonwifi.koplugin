@@ -1,10 +1,10 @@
 -- Off-device tests. Run from the repo root:  luajit tests/run.lua
 package.path = "./?.lua;" .. package.path
 
-local Rules = require("backgammon/rules")
-local Protocol = require("backgammon/protocol")
-local Match = require("backgammon/match")
-local Net = require("backgammon/net")
+local Rules = require("backgammonwifi/rules")
+local Protocol = require("backgammonwifi/protocol")
+local Match = require("backgammonwifi/match")
+local Net = require("backgammonwifi/net")
 
 local passed, failed = 0, 0
 local function eq(actual, expected, name)
@@ -351,7 +351,7 @@ local function msgids(path)
     return ids
 end
 local used = msgids("main.lua")
-local cs = require("backgammon/l10n/cs")
+local cs = require("backgammonwifi/l10n/cs")
 local missing, stale = {}, {}
 for id in pairs(used) do if not cs[id] then missing[#missing + 1] = id end end
 for id in pairs(cs) do if not used[id] then stale[#stale + 1] = id end end

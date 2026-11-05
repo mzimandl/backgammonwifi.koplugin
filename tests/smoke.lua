@@ -198,15 +198,15 @@ local function paint(board)
     return calls
 end
 
-local Rules = require("backgammon/rules")
+local Rules = require("backgammonwifi/rules")
 local Backgammon = dofile("main.lua")
 local plugin = Backgammon:new{ ui = { menu = { registerToMainMenu = function() end } } }
 local menu_items = {}
 plugin:addToMainMenu(menu_items)
-eq(menu_items.backgammon.text, "Backgammon", "main menu entry")
+eq(menu_items.backgammonwifi.text, "Backgammon (Wi-Fi)", "main menu entry")
 local function item(id)
-    for _i, it in ipairs(menu_items.backgammon.sub_item_table_func()) do
-        if it.backgammon_item == id then return it end
+    for _i, it in ipairs(menu_items.backgammonwifi.sub_item_table_func()) do
+        if it.backgammonwifi_item == id then return it end
     end
 end
 eq(item("name").text_func(), "Your name: Kindle Test", "default name is the device model")
