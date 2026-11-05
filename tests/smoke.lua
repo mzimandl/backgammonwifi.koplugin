@@ -327,9 +327,9 @@ if gd > hd then
     local only_dice = true
     for i = dirty_before + 1, #dirty - 1 do -- the last one is the result
         local r = dirty[i].region
-        if dirty[i].kind ~= "fast" or not r or r.h ~= u or r.w ~= 6 * u then only_dice = false end
+        if dirty[i].kind ~= "ui" or not r or r.h ~= u or r.w ~= 6 * u then only_dice = false end
     end
-    eq(#dirty - 1 - dirty_before .. " " .. tostring(only_dice), "6 true", "frames refresh just the dice strip, quickly")
+    eq(#dirty - 1 - dirty_before .. " " .. tostring(only_dice), "6 true", "frames refresh just the dice strip")
     eq(dirty[#dirty].kind .. tostring(dirty[#dirty].region), "uinil", "the result refreshes the screen")
     eq(client.sent:match("ROLL %d %d\n$") ~= nil, true, "ROLL sent after the animation")
     eq(buttons(screen).Done ~= nil, true, "then the dice are played")

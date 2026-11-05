@@ -610,7 +610,7 @@ function GameScreen:build()
 end
 
 local ROLL_FRAMES = 6       -- dice shown before the real roll
-local ROLL_FRAME_TIME = 0.12 -- seconds
+local ROLL_FRAME_TIME = 0.15 -- seconds
 
 --- Rolls my dice (or my opening die) with a short animation: a few random
 -- faces, then the roll.
@@ -638,11 +638,12 @@ function GameScreen:rollDice()
         end
         self.rolling = opening and { math.random(6) } or { math.random(6), math.random(6) }
         -- Only the dice change while rolling (the status and the buttons stay), and
-        -- the board doesn't move (see build()): refresh just the strip of the dice,
-        -- black and white only, so the quick "fast" mode doesn't flash anything else.
+        -- the board doesn't move (see build()): refresh just the strip of the dice.
+        -- "ui", not "fast": fast (DU) updates following each other this quickly
+        -- collide on e-ink and lose parts of the dice (whole-board "fast" flashed too).
         local region = self.board:diceRegion()
         self:build()
-        UIManager:setDirty(self, "fast", region)
+        UIManager:setDirty(self, "ui", region)
         UIManager:scheduleIn(ROLL_FRAME_TIME, step)
     end
     step()
