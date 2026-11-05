@@ -10,18 +10,29 @@ way: the higher die starts and plays both, equal dice are rolled again. After
 that each device rolls its own dice when its player rolls them (roll(), ROLL)
 and sends its moves (MOVE); the other side checks them against the rules.
 
+The doubling cube: before rolling, the player whose turn begins may offer to
+double the stakes (double(), DOUBLE) when the cube is in the middle or theirs.
+The opponent takes (take(), TAKE: the cube is doubled and becomes theirs) or
+drops (drop(), DROP: the game ends, the doubler wins the stakes before the
+offer). A won game scores the cube value times Rules.result() (gammon 2,
+backgammon 3); `score` counts these points.
+
 receive() and the local actions return an event table for the UI (or nil when
 nothing visible changed); on a protocol error receive() returns nil, error.
 Events: joined, opening (one opening die known: mine or the opponent's),
 opening_tie (equal: roll again), start, rolled (the opponent's dice), moved (the opponent's
 moves; my turn begins, waiting for roll()), roll (my dice), played (my turn
-ended), rematch_request, rematch, left.
+ended), double (an offer to double: mine or the opponent's), take, drop (the
+answer: mine or the opponent's), rematch_request, rematch, left. The events
+that end a game have won = true (played, moved, drop).
 ]]
 
 local Protocol = require("backgammonwifi/protocol")
 local Rules = require("backgammonwifi/rules")
 
 local M = {}
+
+M.MAX_CUBE = 64
 
 local Match = {}
 Match.__index = Match
@@ -46,6 +57,8 @@ function Match:reset()
     self.my_open, self.peer_open = nil, nil
     self.position = Rules.new()
     self.turn, self.dice, self.current, self.winner = nil, nil, nil, nil
+    self.cube, self.cube_owner, self.offer = 1, nil, nil -- owner/offer: "me" | "peer"
+    self.result, self.points = nil, nil -- of the finished game
     self.rematch, self.peer_rematch = false, false
     self.last_peer_moves = nil
 end
@@ -128,7 +141,44 @@ end
 
 --- My turn has begun and the dice are still to be rolled.
 function Match:needs_roll()
-    return self.phase == "playing" and self.turn == "me" and self.current == nil
+    return self.phase == "playing" and self.turn == "me" and self.current == nil and not self.offer
+end
+
+--- The game ends: winner "me" | "peer", result 1..3 (Rules.result; 1 on a drop).
+function Match:game_over(winner, result)
+    self.phase, self.winner, self.dice, self.current = "over", winner, nil, nil
+    self.result, self.points = result, self.cube * result
+    self.score[winner] = self.score[winner] + self.points
+end
+
+--- I may offer to double now (before rolling, with the cube in the middle or mine).
+function Match:can_double()
+    return self:needs_roll() and self.cube_owner ~= "peer" and self.cube < M.MAX_CUBE
+end
+
+--- Offers to double. Returns the "double" event.
+function Match:double()
+    if not self:can_double() then return nil end
+    self.offer = "me"
+    self:send("DOUBLE")
+    return { type = "double", mine = true }
+end
+
+--- Takes the opponent's double: the cube is doubled and becomes mine.
+function Match:take()
+    if self.offer ~= "peer" then return nil end
+    self.offer, self.cube, self.cube_owner = nil, self.cube * 2, "me"
+    self:send("TAKE")
+    return { type = "take", mine = true }
+end
+
+--- Drops the opponent's double: the game is lost for the cube value.
+function Match:drop()
+    if self.offer ~= "peer" then return nil end
+    self.offer = nil
+    self:send("DROP")
+    self:game_over("peer", 1)
+    return { type = "drop", mine = true, won = true }
 end
 
 --- Rolls my dice. Returns the "roll" event.
@@ -159,8 +209,7 @@ function Match:finish_turn()
     self.current, self.dice = nil, nil
     local ev = { type = "played", moves = t.played }
     if Rules.won(self.position, self.color) then
-        self.phase, self.winner = "over", "me"
-        self.score.me = self.score.me + 1
+        self:game_over("me", Rules.result(self.position, self.color))
         ev.won = true
     else
         self.turn = "peer"
@@ -214,7 +263,7 @@ function handlers:OPEN(words)
 end
 
 function handlers:ROLL(words)
-    if self.phase ~= "playing" or self.turn ~= "peer" or self.dice then return nil, "unexpected ROLL" end
+    if self.phase ~= "playing" or self.turn ~= "peer" or self.dice or self.offer then return nil, "unexpected ROLL" end
     local d1, d2 = die(words[1]), die(words[2])
     if not d1 or not d2 then return nil, "bad ROLL" end
     self.dice = { d1, d2 }
@@ -233,13 +282,34 @@ function handlers:MOVE(words)
     self.last_peer_moves = t.played
     local ev = { type = "moved", moves = t.played }
     if Rules.won(self.position, self.peer_color) then
-        self.phase, self.winner, self.dice = "over", "peer", nil
-        self.score.peer = self.score.peer + 1
+        self:game_over("peer", Rules.result(self.position, self.peer_color))
         ev.won = true
         return ev
     end
     self.turn, self.dice = "me", nil
     return ev
+end
+
+function handlers:DOUBLE()
+    if self.phase ~= "playing" or self.turn ~= "peer" or self.dice or self.offer
+        or self.cube_owner == "me" or self.cube >= M.MAX_CUBE then
+        return nil, "unexpected DOUBLE"
+    end
+    self.offer = "peer"
+    return { type = "double", mine = false }
+end
+
+function handlers:TAKE()
+    if self.offer ~= "me" then return nil, "unexpected TAKE" end
+    self.offer, self.cube, self.cube_owner = nil, self.cube * 2, "peer"
+    return { type = "take", mine = false }
+end
+
+function handlers:DROP()
+    if self.offer ~= "me" then return nil, "unexpected DROP" end
+    self.offer = nil
+    self:game_over("me", 1)
+    return { type = "drop", mine = false, won = true }
 end
 
 function handlers:REMATCH()

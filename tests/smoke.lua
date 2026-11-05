@@ -246,9 +246,9 @@ eq(buttons(screen).Done, nil, "no buttons while waiting")
 
 -- discovery answered while waiting
 local hudp = udp_on(7542)
-hudp.inbox = { { "DISCOVER 2", "192.168.1.30", 7543 } }
+hudp.inbox = { { "DISCOVER 3", "192.168.1.30", 7543 } }
 tick()
-eq(hudp.out[1] and hudp.out[1][1], "GAME 2 7541 Martin", "discovery answered")
+eq(hudp.out[1] and hudp.out[1][1], "GAME 3 7541 Martin", "discovery answered")
 
 -- runs the roll animation; returns the number of frames
 local function animate()
@@ -261,10 +261,10 @@ local function animate()
 end
 
 -- a guest joins: the opening roll
-local client = fake_tcp({ "HELLO 2 Guest\n" })
+local client = fake_tcp({ "HELLO 3 Guest\n" })
 table.insert(pending_clients, client)
 tick(2)
-eq(client.sent, "WELCOME 2 Martin\n", "host welcomes the guest")
+eq(client.sent, "WELCOME 3 Martin\n", "host welcomes the guest")
 eq(screen.title_bar.subtitle, "Opponent: Guest", "opponent shown")
 eq(status_of(screen), "Guest joined the game.\nOpening roll: tap Roll or the board. The higher die starts.",
     "opening roll asked for")
@@ -388,9 +388,24 @@ eq(board_bottom(screen), bottom_with_buttons, "the board stays where it was")
 eq(content_height(screen), 800, "the screen is filled to the bottom")
 eq(status_of(screen), "Guest is rolling…\nPips: you " .. Rules.pips(t.state, "white") .. ", Guest " .. Rules.pips(t.state, "black"),
     "waiting for the guest")
+-- the guest doubles before rolling; we take
+eq(screen.board.cube.value .. tostring(screen.board.cube.owner), "1nil", "the cube in the middle")
+client.incoming = { "DOUBLE\n" }
+tick()
+eq(status_of(screen):match("^Guest offers to double to 2%. Take and play on for 2, or drop and lose 1%.") ~= nil, true,
+    "the offer shown: " .. status_of(screen))
+eq(buttons(screen).Take ~= nil and buttons(screen).Drop ~= nil, true, "Take or Drop")
+buttons(screen).Drop.callback()
+eq(shown[#shown].text, "Drop the double and lose this game?", "dropping asks first")
+buttons(screen).Take.callback()
+eq(client.sent:match("TAKE\n$") ~= nil, true, "TAKE sent")
+eq(screen.board.cube.value .. screen.board.cube.owner, "2me", "the cube is ours")
+eq(status_of(screen):match("^You took the double: the stakes are 2%.\nGuest is rolling") ~= nil, true,
+    "taken: " .. status_of(screen))
+eq(paint(screen.board) > 100, true, "board with the cube painted")
 client.incoming = { "ROLL 3 1\n" }
 tick()
-eq(status_of(screen):match("^Guest is playing 3–1") ~= nil, true, "the guest's dice shown")
+eq(status_of(screen):match("Guest is playing 3–1") ~= nil, true, "the guest's dice shown")
 eq(screen.board.dice.mine == nil and screen.board.dice.peer ~= nil, true, "on the left")
 
 -- taps on the painted board map to points
@@ -406,6 +421,22 @@ screen.board:onTapBoard(nil, { pos = { x = 5 + 6 * u + 2, y = 7 + 2 * u } })
 eq(got, Rules.BAR, "the bar")
 screen.board:onTapBoard(nil, { pos = { x = 5 + 13 * u + 2, y = 7 + 9 * u } })
 eq(got, Rules.OFF, "the tray")
+
+-- we redouble; the guest drops
+client.incoming = { (guest_moves(t.state, 3, 1)) }
+tick()
+eq(status_of(screen):match("\nYour turn: tap Roll or the board to roll the dice, or Double") ~= nil, true,
+    "doubling offered: " .. status_of(screen))
+buttons(screen).Double.callback()
+eq(client.sent:match("DOUBLE\n$") ~= nil, true, "DOUBLE sent")
+eq(buttons(screen).Roll, nil, "no roll while the offer is open")
+eq(screen.board.on_tap, nil, "nor a tap on the board")
+eq(status_of(screen):match("You offered to double the stakes to 4%. Waiting for Guest…") ~= nil, true,
+    "waiting for the answer: " .. status_of(screen))
+client.incoming = { "DROP\n" }
+tick()
+eq(status_of(screen), "Guest dropped the double.\nYou won! Points: 2", "the guest dropped")
+eq(screen.title_bar.subtitle, "Opponent: Guest · points 2 : 0", "points counted")
 
 -- the opponent leaves
 client.incoming = { "BYE\n" }
@@ -432,7 +463,7 @@ client.incoming = { "CLOSE" }
 tick()
 eq(screen.title_bar.subtitle, nil, "still waiting for an opponent")
 hudp = udp_on(7542)
-hudp.inbox = { { "DISCOVER 2", "192.168.1.31", 7543 } }
+hudp.inbox = { { "DISCOVER 3", "192.168.1.31", 7543 } }
 tick()
 eq(#hudp.out, 1, "discovery answered again")
 -- protocol error
@@ -461,10 +492,10 @@ dialog.text_value = "10.0.0.9:7000"
 dialog.buttons[1][2].callback()
 eq(connect_to, "10.0.0.9:7000", "connects to the address")
 local sock = tcps[#tcps]
-eq(sock.sent, "HELLO 2 Martin\n", "guest says hello")
+eq(sock.sent, "HELLO 3 Martin\n", "guest says hello")
 screen = shown[#shown]
 eq(status_of(screen):match("Connecting…$") ~= nil, true, "guest waits for WELCOME")
-sock.incoming = { "WELCOME 2 Host\n" }
+sock.incoming = { "WELCOME 3 Host\n" }
 tick()
 eq(screen.title_bar.subtitle, "Opponent: Host", "guest joined")
 eq(sock.sent:match("OPEN") == nil, true, "no opening die before Roll")
@@ -496,14 +527,14 @@ eq(#zmqs, 1, "search polled")
 local sudp = udp_on(7543)
 tick()
 eq(#sudp.out, 2, "DISCOVER broadcast")
-sudp.inbox = { { "GAME 2 7541 Host", "192.168.1.40", 7542 } }
+sudp.inbox = { { "GAME 3 7541 Host", "192.168.1.40", 7542 } }
 tick()
 eq(menu.item_table[1].text .. " " .. menu.item_table[1].mandatory, "Host 192.168.1.40", "game listed")
 eq(menu.item_table[2].text, "Join by address…", "join by address below")
 clock = clock + 10
 tick()
 eq(menu.item_table[1].text, "Searching for games…", "silent game dropped")
-sudp.inbox = { { "GAME 2 7541 Host", "192.168.1.40", 7542 } }
+sudp.inbox = { { "GAME 3 7541 Host", "192.168.1.40", 7542 } }
 tick()
 menu.item_table[1].callback()
 eq(sudp.closed, true, "search stopped when the list closes")

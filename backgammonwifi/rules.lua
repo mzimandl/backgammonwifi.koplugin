@@ -120,6 +120,19 @@ function M.won(s, color)
     return s.off[color] == M.CHECKERS
 end
 
+--- How `winner` won: 1 a single game, 2 a gammon (the loser bore off no
+-- checker), 3 a backgammon (and still has one on the bar or in the winner's
+-- home board).
+function M.result(s, winner)
+    local loser = OTHER[winner]
+    if s.off[loser] > 0 then return 1 end
+    if s.bar[loser] > 0 then return 3 end
+    for rel = 19, 24 do
+        if M.count(s, loser, rel) > 0 then return 3 end
+    end
+    return 2
+end
+
 --- Pips `color` still has to move.
 function M.pips(s, color)
     local n = 25 * s.bar[color]

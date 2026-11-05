@@ -7,7 +7,9 @@ answers WELCOME <version> <name>, or ERROR <reason> and closes.
 Then: OPEN <die> (each player's opening die; the higher one starts and plays
 both, equal ones are rolled again), ROLL <d1> <d2> (the player whose turn begins),
 MOVE [from/die ...] (the moves of that turn, from the mover's side: points
-24..1, bar 25; die = the die used), REMATCH, PING, BYE.
+24..1, bar 25; die = the die used), DOUBLE (the player whose turn begins, before
+rolling, offers to double the stakes), TAKE / DROP (the answer), REMATCH, PING,
+BYE.
 
 UDP discovery: a guest sends DISCOVER <version> to the broadcast address,
 the host waiting for an opponent answers GAME <version> <tcp port> <name>.
@@ -15,7 +17,7 @@ the host waiting for an opponent answers GAME <version> <tcp port> <name>.
 
 local M = {}
 
-M.VERSION = 2 -- 2: OPEN (each player rolls their opening die) replaced START
+M.VERSION = 3 -- 2: OPEN (each player rolls their opening die) replaced START; 3: the doubling cube
 M.PORT = 7541           -- TCP, host
 M.DISCOVERY_PORT = 7542 -- UDP, host listens
 M.SEARCH_PORT = 7543    -- UDP, guest listens for answers

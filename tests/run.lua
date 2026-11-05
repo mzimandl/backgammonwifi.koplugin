@@ -233,7 +233,11 @@ eq(host.phase .. guest.phase, "overover", "the game ends")
 eq((host.winner == "me") ~= (guest.winner == "me"), true, "exactly one winner")
 local winner = host.winner == "me" and host or guest
 eq(Rules.won(host.position, winner.color) and Rules.won(guest.position, winner.color), true, "both positions agree")
-eq(winner.score.me .. (winner == host and guest or host).score.peer, "11", "score counted on both sides")
+local loser = winner == host and guest or host
+eq(winner.points >= 1 and winner.points == Rules.result(winner.position, winner.color), true, "points: the cube times the result")
+eq(winner.score.me .. " " .. loser.score.peer .. " " .. loser.points, winner.points .. " " .. winner.points .. " " .. winner.points,
+    "score counted on both sides")
+local first_points = winner.points
 
 guest:request_rematch()
 deliver()
@@ -245,7 +249,8 @@ eq(host.phase .. guest.phase, "openingopening", "rematch: a new opening roll")
 opening(host, guest, deliver)
 eq(host.phase .. guest.phase, "playingplaying", "rematch: a new game starts")
 eq(Rules.pips(host.position, "white"), 167, "rematch: starting position")
-eq(host.score.me + host.score.peer, 1, "rematch keeps the score")
+eq(host.score.me + host.score.peer, first_points, "rematch keeps the score")
+eq(host.cube .. tostring(host.cube_owner) .. tostring(host.result), "1nilnil", "rematch: the cube back in the middle")
 -- the other order
 play(host, guest, deliver, pick)
 host:request_rematch()
@@ -254,7 +259,7 @@ guest:request_rematch()
 deliver()
 opening(host, guest, deliver)
 eq(host.phase .. guest.phase, "playingplaying", "rematch asked by the host first")
-eq(host.score.me + host.score.peer, 2, "two games played")
+eq(host.score.me + host.score.peer > first_points, true, "two games played")
 
 -- many random games stay in sync
 for seed = 20, 40 do
@@ -268,13 +273,14 @@ end
 -- protocol errors
 host, guest, deliver = pair(3)
 eq(select(2, guest:receive("MOVE 24/3")), "unexpected MOVE", "move before the game")
-eq(select(2, guest:receive("HELLO 2 x")), "unexpected HELLO", "guest doesn't take HELLO")
+eq(select(2, guest:receive("HELLO 3 x")), "unexpected HELLO", "guest doesn't take HELLO")
 eq(select(2, host:receive("HELLO 1 x")), "version", "version 1 (START) refused")
+eq(select(2, host:receive("HELLO 2 x")), "version", "version 2 (no cube) refused")
 eq(select(2, host:receive("HELLO 99 x")), "version", "other version refused")
 eq(host:receive("FUTURE stuff"), nil, "unknown commands are ignored")
 eq(select(2, host:receive("ERROR busy")), "busy", "ERROR ends the match")
 eq(select(2, guest:receive("OPEN 3")), "unexpected OPEN", "no opening roll before joining")
-guest:receive("WELCOME 2 H")
+guest:receive("WELCOME 3 H")
 eq(select(2, guest:receive("OPEN 7")), "bad OPEN", "not a die")
 guest:receive("OPEN 6")
 eq(select(2, guest:receive("OPEN 5")), "unexpected OPEN", "one opening die per round")
@@ -298,9 +304,81 @@ eq(guest:my_turn() and not guest:needs_roll(), true, "guest plays")
 eq(guest:roll(), nil, "only one roll per turn")
 eq(Rules.count(guest.position, "white", 7), 1, "the host's checker moved")
 
+-- results: single, gammon, backgammon
+s = empty(15, 3)
+eq(Rules.result(s, "white"), 1, "single game")
+s = empty(15, 0)
+s.points[20] = -15
+eq(Rules.result(s, "white"), 2, "gammon")
+s.points[20], s.points[3] = -14, -1
+eq(Rules.result(s, "white"), 3, "backgammon: in the winner's home board")
+s.points[3], s.bar.black = 0, 1
+eq(Rules.result(s, "white"), 3, "backgammon: on the bar")
+
+-- the doubling cube
+local function started(seed)
+    local h, g, d, evs = pair(seed)
+    g:hello()
+    d()
+    opening(h, g, d)
+    -- play out the opening turn
+    local p = h:my_turn() and h or g
+    while not p.current:done() do
+        local mv = p.current:moves()[1]
+        p:play(mv.from, mv.die)
+    end
+    p:finish_turn()
+    d()
+    local q = p == h and g or h
+    return q, p, d, evs -- q's turn, dice not rolled yet
+end
+local a, z, dl, evs = started(5)
+eq(a:needs_roll() and a:can_double() and not z:can_double(), true, "the player to roll may double")
+eq(z:double() or z:take() or z:drop(), nil, "the other one may not")
+eq(a:double().type, "double", "double offered")
+eq(a:needs_roll() or a:can_double() or a:roll() or false, false, "no roll while the offer is open")
+dl()
+eq(evs[a.role == "host" and "guest" or "host"][#evs[a.role == "host" and "guest" or "host"]], "double", "the opponent sees the offer")
+eq(z.offer .. a.offer, "peerme", "offer on both sides")
+eq(z:take().type, "take", "taken")
+dl()
+eq(a.cube .. a.cube_owner .. z.cube .. z.cube_owner, "2peer2me", "the cube doubled, the taker owns it")
+eq(a.offer == nil and a:needs_roll() and not a:can_double(), true, "the doubler rolls, can't double again")
+a:roll()
+dl()
+while not a.current:done() do
+    local mv = a.current:moves()[1]
+    a:play(mv.from, mv.die)
+end
+a:finish_turn()
+dl()
+eq(z:can_double(), true, "the owner may redouble")
+z:double()
+dl()
+eq(select(2, a:receive("DOUBLE")), "unexpected DOUBLE", "no second offer")
+eq(a:drop().won, true, "dropped")
+dl()
+eq(z.phase .. a.phase, "overover", "game over")
+eq(z.winner .. a.winner .. z.points .. a.points .. z.score.me .. a.score.peer, "mepeer2222", "the doubler wins the stakes before the offer")
+eq(select(2, a:receive("TAKE")), "unexpected TAKE", "TAKE without an offer")
+eq(select(2, a:receive("DROP")), "unexpected DROP", "DROP without an offer")
+-- the cube's limit
+a, z, dl = started(6)
+a.cube, z.cube = Match.MAX_CUBE, Match.MAX_CUBE
+eq(a:can_double(), false, "no doubling past 64")
+eq(select(2, z:receive("DOUBLE")), "unexpected DOUBLE", "DOUBLE past 64 refused")
+-- a gammon with the cube
+a, z, dl = started(8)
+a.cube = 4
+a.position = empty(0, 0)
+a.position.off[a.color] = 15
+a.position.points[a.color == "white" and 20 or 5] = a.color == "white" and -15 or 15
+a:game_over("me", Rules.result(a.position, a.color))
+eq(a.points .. a.score.me, "88", "gammon doubles the cube's stakes")
+
 -- the host's opponent leaves before the game
 host = Match.new{ role = "host", name = "H", send = function() end }
-host:receive("HELLO 2 G")
+host:receive("HELLO 3 G")
 host:drop_peer()
 eq(host.peer == nil and host.phase == "waiting", true, "drop_peer waits for another opponent")
 
@@ -373,10 +451,10 @@ local fake_socket = {
 local hst = Net.host(fake_socket, 7541)
 local hudp = udps[#udps]
 eq(hudp.port, Protocol.DISCOVERY_PORT, "host listens for discovery")
-hudp.inbox = { { "DISCOVER 2", "10.0.0.9", 7543 }, { "junk", "10.0.0.8", 1 } }
+hudp.inbox = { { "DISCOVER 3", "10.0.0.9", 7543 }, { "junk", "10.0.0.8", 1 } }
 hst:answer("Host")
-eq(#hudp.out .. " " .. hudp.out[1][1] .. " " .. hudp.out[1][2], "1 GAME 2 7541 Host 10.0.0.9", "host answers DISCOVER only")
-hudp.inbox = { { "DISCOVER 2", "10.0.0.9", 7543 } }
+eq(#hudp.out .. " " .. hudp.out[1][1] .. " " .. hudp.out[1][2], "1 GAME 3 7541 Host 10.0.0.9", "host answers DISCOVER only")
+hudp.inbox = { { "DISCOVER 3", "10.0.0.9", 7543 } }
 hst:answer(nil)
 eq(#hudp.out, 1, "no answers once the game is full")
 
@@ -385,7 +463,7 @@ local sudp = udps[#udps]
 eq(sudp.port, Protocol.SEARCH_PORT, "search listens on its port")
 search:send()
 eq(#sudp.out .. " " .. sudp.out[2][2], "2 10.0.0.255", "discover broadcast to both addresses")
-sudp.inbox = { { "GAME 2 7541 Host", "10.0.0.9", 7542 }, { "GAME 2 7541 Host", "10.0.0.9", 7542 } }
+sudp.inbox = { { "GAME 3 7541 Host", "10.0.0.9", 7542 }, { "GAME 3 7541 Host", "10.0.0.9", 7542 } }
 eq(search:poll(1), true, "found a game")
 eq(#search.games .. " " .. search.games[1].name .. " " .. search.games[1].ip, "1 Host 10.0.0.9", "one entry per host")
 eq(search:poll(2), false, "nothing new")

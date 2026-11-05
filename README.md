@@ -13,10 +13,12 @@ Both devices must be on the same Wi-Fi network. In the menu: **Tools → Backgam
 ### Rules
 - Each player has 15 checkers. The host plays white, the guest black. Each player sees the board from their own side: their home board (points 1–6) bottom right, checkers moving counter-clockwise towards it.
 - The game starts with the opening roll as soon as the guest joins: each player rolls one die, the higher one starts and plays both dice; equal dice are rolled again. After that each player rolls their own dice when their turn begins. **Roll** (or a tap on the board) shows a short animation and then the roll.
-- Both devices need version 0.2.0 or newer (the opening roll changed the protocol; older versions don't find or join newer games).
+- Both devices need version 0.3.0 or newer (the doubling cube changed the protocol; older versions don't find or join newer games).
 - Doubles are played four times. Both dice must be used when possible; when only one can be used, it must be the larger one if it can be played. The game enforces this: only legal moves can be made.
 - A point with two or more opposing checkers is blocked. A single opposing checker is hit and goes to the bar; checkers on the bar must enter the opponent's home board before any other move.
-- Once all 15 checkers are in the home board they are borne off; a higher die than needed bears off from the highest occupied point. Whoever bears off all their checkers first wins. **Play again** starts a new game once both players tap it; the subtitle counts the games won.
+- Once all 15 checkers are in the home board they are borne off; a higher die than needed bears off from the highest occupied point. Whoever bears off all their checkers first wins. **Play again** starts a new game once both players tap it.
+- The doubling cube: before rolling, the player whose turn it is may tap **Double** when the cube is in the middle or theirs. The opponent either taps **Take** (the stakes double, the cube becomes theirs, so only they can redouble) or **Drop** (they lose the game at the stakes before the offer). The cube goes up to 64. It sits in the tray on the right: in the middle (showing 64) until the first double, then on its owner's side.
+- Scoring: the winner gets the stakes shown by the cube; twice that for a gammon (the loser hasn't borne off any checker) and three times for a backgammon (the loser also still has a checker on the bar or in the winner's home board). The subtitle adds up the points of all games played since the guest joined. There is no match length: play as many games as you like.
 
 ### Moving
 Tap a checker to pick it up (it turns gray): the points it can move to are framed (the tray on the right when it can be borne off). Tap a framed point to move it there; one die is used per move. Checkers on the bar are picked up automatically. **Undo** takes back moves, **Done** ends the turn once the dice are played (or when no move is possible).

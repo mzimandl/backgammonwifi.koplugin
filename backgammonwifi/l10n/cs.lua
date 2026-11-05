@@ -19,12 +19,20 @@ A checker may land on a point with at most one opposing checker; that checker is
 
 Once all 15 checkers are in the home board, they are borne off. Whoever bears off all their checkers first wins.
 
+Before rolling, a player may offer to double the stakes (Double) when the doubling cube is in the middle or theirs. The opponent either takes – the game goes on for twice as much and the cube becomes theirs – or drops and loses the game at the stakes before the offer. The cube is in the tray on the right: in the middle until the first double, then on its owner's side.
+
+The winner scores the stakes shown by the cube; twice as much (gammon) when the loser hasn't borne off any checker, three times (backgammon) when they also still have a checker on the bar or in the winner's home board.
+
 Both devices must be on the same Wi-Fi network. One player hosts the game, the other finds it in Find a game or joins by the address shown on the host's screen.]] ] =
         [[Každý hráč má 15 kamenů a posouvá je po desce o čísla hozená dvěma kostkami směrem do svého domova (pole 1–6 vpravo dole). Dvojice se hrají čtyřikrát. Je-li to možné, musí se využít obě kostky; lze-li zahrát jen jednu, musí to být ta vyšší, pokud jde zahrát.
 
 Kámen smí vstoupit na pole, kde je nejvýš jeden soupeřův kámen; ten je vyhozen a jde na bar. Kameny z baru se musí nejdřív vrátit do hry v soupeřově domově, teprve pak lze táhnout jinými.
 
 Jakmile jsou všech 15 kamenů v domově, vyvádějí se z desky. Kdo první vyvede všechny své kameny, vyhrává.
+
+Před hodem smí hráč nabídnout zdvojení sázky (Zdvojit), pokud je zdvojovací kostka uprostřed nebo patří jemu. Soupeř buď přijme – hraje se o dvojnásobek a kostka patří jemu –, nebo odmítne a prohrává hru o dosavadní sázku. Kostka je v přihrádce vpravo: do prvního zdvojení uprostřed, potom na straně svého majitele.
+
+Vítěz získá sázku, kterou ukazuje kostka; dvojnásobek (gammon), pokud poražený nevyvedl ani jeden kámen, trojnásobek (backgammon), pokud mu navíc zůstal kámen na baru nebo v domově vítěze.
 
 Obě zařízení musí být ve stejné síti Wi-Fi. Jeden hráč hru založí, druhý ji najde v Najít hru nebo se připojí podle adresy zobrazené na obrazovce zakládajícího hráče.]],
 
@@ -43,7 +51,7 @@ Obě zařízení musí být ve stejné síti Wi-Fi. Jeden hráč hru založí, d
 
     -- game screen
     ["Opponent: %1"] = "Soupeř: %1",
-    ["Opponent: %1 · games %2 : %3"] = "Soupeř: %1 · hry %2 : %3",
+    ["Opponent: %1 · points %2 : %3"] = "Soupeř: %1 · body %2 : %3",
     ["Waiting for an opponent. Your address: %1"] = "Čeká se na soupeře. Vaše adresa: %1",
     ["Waiting for an opponent."] = "Čeká se na soupeře.",
     ["Waiting for %1…"] = "Čeká se na %1…",
@@ -57,6 +65,18 @@ Obě zařízení musí být ve stejné síti Wi-Fi. Jeden hráč hru založí, d
     ["%1 is rolling…"] = "%1 hází…",
     ["Pips: you %1, %2 %3"] = "Počet ok: vy %1, %2 %3",
     ["You won!"] = "Vyhráli jste!",
+    ["Points: %1"] = "Body: %1",
+    ["gammon"] = "gammon",
+    ["backgammon"] = "backgammon",
+    ["You offered to double the stakes to %1. Waiting for %2…"] = "Nabídli jste zdvojení sázky na %1. Čeká se na hráče %2…",
+    ["%1 offers to double to %2. Take and play on for %2, or drop and lose %3."] =
+        "%1 nabízí zdvojení na %2. Přijměte a hrajte o %2, nebo odmítněte a prohrajte %3.",
+    ["Your turn: tap Roll or the board to roll the dice, or Double to double the stakes."] =
+        "Jste na tahu: hoďte kostkami (Hodit nebo klepnutí na desku), nebo nabídněte zdvojení sázky (Zdvojit).",
+    ["Double"] = "Zdvojit",
+    ["Take"] = "Přijmout",
+    ["Drop"] = "Odmítnout",
+    ["Drop the double and lose this game?"] = "Odmítnout zdvojení a prohrát tuto hru?",
     ["%1 won."] = "Vyhrává %1.",
     ["%1 wants to play again."] = "%1 chce hrát znovu.",
     ["Close"] = "Zavřít",
@@ -94,4 +114,8 @@ Obě zařízení musí být ve stejné síti Wi-Fi. Jeden hráč hru založí, d
     ["%1 cannot move."] = "%1 nemůže táhnout.",
     ["Your checkers hit: %1."] = "Vyhozené kameny: %1.",
     ["New game."] = "Nová hra.",
+    ["You took the double: the stakes are %1."] = "Přijali jste zdvojení: sázka je teď %1.",
+    ["%1 took the double: the stakes are %2."] = "%1 přijímá zdvojení: sázka je teď %2.",
+    ["You dropped the double."] = "Odmítli jste zdvojení.",
+    ["%1 dropped the double."] = "%1 zdvojení odmítá.",
 }

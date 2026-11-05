@@ -153,13 +153,14 @@ local PIPS = {
 }
 
 local font_sizes = {} -- unit → label font size
+local cube_font_sizes = {} -- unit → font size of the doubling cube's number
 
 --- The board from `color`'s side.
 -- position: Rules position; selected: the player's point whose checker is
 -- picked up; targets: { [point] = true } where it can go (Rules.OFF too);
 -- landed: { [point] = true } where the opponent's last moves ended;
 -- dice = { mine = { values, used = { [i] = true } }, peer = { values } } (either
--- may be missing); on_tap(point).
+-- may be missing); cube = { value, owner = "me" | "peer" | nil }; on_tap(point).
 local BoardWidget = InputContainer:extend{
     width = nil,
     height = nil,
@@ -169,6 +170,7 @@ local BoardWidget = InputContainer:extend{
     targets = nil,
     landed = nil,
     dice = nil,
+    cube = nil,
     on_tap = nil,
 }
 
@@ -184,6 +186,12 @@ function BoardWidget:init()
         font_sizes[u] = fs
     end
     self.face = Font:getFace("cfont", fs)
+    local cfs = cube_font_sizes[u]
+    if not cfs then
+        cfs = TextWidget:getFontSizeToFitHeight("cfont", math.floor(u * 0.45), 0)
+        cube_font_sizes[u] = cfs
+    end
+    self.cube_face = Font:getFace("cfont", cfs)
     self.labels = {}
     for rel = 1, 24 do
         self.labels[rel] = TextWidget:new{ text = tostring(rel), face = self.face, padding = 0 }
@@ -327,6 +335,25 @@ function BoardWidget:paintTo(bb, x, y)
         bb:paintBorder(ox, y_bot, u, 5 * u, math.max(3, math.floor(u / 8)), Blitbuffer.COLOR_BLACK)
     end
 
+    -- the doubling cube in the tray: in the middle (showing 64) until the first
+    -- double, then on its owner's side
+    if self.cube then
+        local cs = math.floor(u * 0.8)
+        local gap = math.floor(u / 10)
+        local cy = self.cube.owner == "me" and y_bot + gap
+            or self.cube.owner == "peer" and y_mid - gap - cs
+            or y_mid + math.floor((u - cs) / 2)
+        local cx = ox + math.floor((u - cs) / 2)
+        bb:paintRect(cx, cy, cs, cs, Blitbuffer.COLOR_WHITE)
+        bb:paintBorder(cx, cy, cs, cs, math.max(2, self.line * 3), Blitbuffer.COLOR_BLACK)
+        local label = TextWidget:new{
+            text = tostring(self.cube.value == 1 and Match.MAX_CUBE or self.cube.value),
+            face = self.cube_face, padding = 0, bold = true,
+        }
+        paint_centered(bb, label, cx, cy, cs, cs)
+        label:free()
+    end
+
     -- frame: both halves and the tray
     local w = self.line * 2
     bb:paintBorder(x, y_top, BAR_COL * u, 11 * u, w, Blitbuffer.COLOR_BLACK)
@@ -405,8 +432,15 @@ function GameScreen:statusText()
             lines[#lines + 1] = T(_("You rolled %1. Waiting for %2…"), m.my_open, m.peer)
         end
     elseif m.phase == "playing" then
-        if m:needs_roll() then
-            lines[#lines + 1] = _("Your turn: tap Roll or the board to roll the dice.")
+        if m.offer == "me" then
+            lines[#lines + 1] = T(_("You offered to double the stakes to %1. Waiting for %2…"), m.cube * 2, m.peer)
+        elseif m.offer == "peer" then
+            lines[#lines + 1] = T(_("%1 offers to double to %2. Take and play on for %2, or drop and lose %3."),
+                m.peer, m.cube * 2, m.cube)
+        elseif m:needs_roll() then
+            lines[#lines + 1] = m:can_double()
+                and _("Your turn: tap Roll or the board to roll the dice, or Double to double the stakes.")
+                or _("Your turn: tap Roll or the board to roll the dice.")
         elseif m:my_turn() then
             local t = m.current
             if t.max == 0 then
@@ -426,7 +460,9 @@ function GameScreen:statusText()
         local s = m:shown()
         lines[#lines + 1] = T(_("Pips: you %1, %2 %3"), Rules.pips(s, m.color), m.peer, Rules.pips(s, m.peer_color))
     else
-        lines[#lines + 1] = m.winner == "me" and _("You won!") or T(_("%1 won."), m.peer)
+        local kind = m.result == 3 and _("backgammon") or m.result == 2 and _("gammon")
+        lines[#lines + 1] = (m.winner == "me" and _("You won!") or T(_("%1 won."), m.peer)) .. " "
+            .. T(_("Points: %1"), m.points) .. (kind and " (" .. kind .. ")" or "")
         if m.rematch and not m.peer_rematch then
             lines[#lines + 1] = T(_("Waiting for %1…"), m.peer)
         elseif m.peer_rematch and not m.rematch then
@@ -440,10 +476,27 @@ function GameScreen:buttonRow()
     local m = game.match
     local close = { text = _("Close"), callback = function() self:onClose() end }
     if game.lost then return { close } end
-    if m:needs_roll() or m:needs_opening_roll() then
+    local function act(fn)
+        return function()
+            local ev = fn(m)
+            if ev then Backgammon.onGameEvent(ev) end
+        end
+    end
+    if m.offer == "peer" then
         return {
-            { text = _("Roll"), callback = function() self:rollDice() end },
+            { text = _("Take"), callback = act(m.take) },
+            { text = _("Drop"), callback = function()
+                UIManager:show(ConfirmBox:new{
+                    text = _("Drop the double and lose this game?"),
+                    ok_text = _("Drop"),
+                    ok_callback = act(m.drop),
+                })
+            end },
         }
+    elseif m:needs_roll() or m:needs_opening_roll() then
+        local row = { { text = _("Roll"), callback = function() self:rollDice() end } }
+        if m:can_double() then row[2] = { text = _("Double"), callback = act(m.double) } end
+        return row
     elseif m:my_turn() then
         return {
             { text = _("Undo"), enabled = #m.current.played > 0, callback = function()
@@ -505,7 +558,7 @@ function GameScreen:build()
     local subtitle
     if m.peer then
         subtitle = (m.score.me + m.score.peer > 0)
-            and T(_("Opponent: %1 · games %2 : %3"), m.peer, m.score.me, m.score.peer)
+            and T(_("Opponent: %1 · points %2 : %3"), m.peer, m.score.me, m.score.peer)
             or T(_("Opponent: %1"), m.peer)
     end
     self.title_bar = TitleBar:new{
@@ -581,6 +634,7 @@ function GameScreen:build()
         targets = self:targets(),
         landed = landed,
         dice = dice,
+        cube = (m.phase == "playing" or m.phase == "over") and { value = m.cube, owner = m.cube_owner } or nil,
         on_tap = not game.lost and (m:my_turn() and function(point) self:onPointTap(point) end
             or (m:needs_roll() or m:needs_opening_roll()) and function() self:rollDice() end) or nil,
     }
@@ -753,6 +807,11 @@ function Backgammon.onGameEvent(ev)
         game.message = text
     elseif t == "played" then
         game.message = nil
+    elseif t == "take" then
+        game.message = ev.mine and T(_("You took the double: the stakes are %1."), m.cube)
+            or T(_("%1 took the double: the stakes are %2."), m.peer, m.cube)
+    elseif t == "drop" then
+        game.message = ev.mine and _("You dropped the double.") or T(_("%1 dropped the double."), m.peer)
     elseif t == "rematch" then
         game.message = _("New game.")
     elseif t == "left" then
@@ -998,6 +1057,10 @@ function Backgammon:showRules()
 A checker may land on a point with at most one opposing checker; that checker is hit and goes to the bar. Checkers on the bar must enter the opponent's home board before any other move.
 
 Once all 15 checkers are in the home board, they are borne off. Whoever bears off all their checkers first wins.
+
+Before rolling, a player may offer to double the stakes (Double) when the doubling cube is in the middle or theirs. The opponent either takes – the game goes on for twice as much and the cube becomes theirs – or drops and loses the game at the stakes before the offer. The cube is in the tray on the right: in the middle until the first double, then on its owner's side.
+
+The winner scores the stakes shown by the cube; twice as much (gammon) when the loser hasn't borne off any checker, three times (backgammon) when they also still have a checker on the bar or in the winner's home board.
 
 Both devices must be on the same Wi-Fi network. One player hosts the game, the other finds it in Find a game or joins by the address shown on the host's screen.]]),
     })
