@@ -751,7 +751,6 @@ function Backgammon.onGameEvent(ev)
         for _i, mv in ipairs(ev.moves) do if mv.hit then hits = hits + 1 end end
         if hits > 0 then text = text .. " " .. T(_("Your checkers hit: %1."), hits) end
         game.message = text
-        if game.auto_roll then m:roll() end
     elseif t == "played" then
         game.message = nil
     elseif t == "rematch" then
@@ -761,12 +760,6 @@ function Backgammon.onGameEvent(ev)
         return
     end
     if game.screen then game.screen:update() end
-    -- a new opening roll: rolled at once with automatic rolling
-    if (t == "joined" or t == "rematch" or t == "opening_tie") and game.auto_roll
-        and m:needs_opening_roll() then
-        local opened = m:roll_opening()
-        if opened then Backgammon.onGameEvent(opened) end
-    end
 end
 
 local function poll_game()
@@ -812,7 +805,6 @@ end
 function Backgammon:startGame(role, fields)
     game = fields
     game.role = role
-    game.auto_roll = self.settings:isTrue("auto_roll")
     game.match = Match.new{
         role = role,
         name = self:playerName(),
@@ -1020,13 +1012,6 @@ function Backgammon:mainMenu()
         { text_func = function() return T(_("Your name: %1"), self:playerName()) end, backgammonwifi_item = "name",
             keep_menu_open = true,
             callback = function(touchmenu_instance) self:editName(touchmenu_instance) end },
-        { text = _("Roll the dice automatically"), backgammonwifi_item = "auto_roll", keep_menu_open = true,
-            checked_func = function() return self.settings:isTrue("auto_roll") end,
-            callback = function()
-                self.settings:flipNilOrFalse("auto_roll")
-                self.settings:flush()
-                game.auto_roll = self.settings:isTrue("auto_roll")
-            end },
         { text = _("Rules"), backgammonwifi_item = "rules", keep_menu_open = true,
             callback = function() self:showRules() end },
     }

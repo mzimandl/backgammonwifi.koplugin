@@ -13,7 +13,6 @@ return {
     ["Player"] = "Hráč",
     ["Save"] = "Uložit",
     ["Rules"] = "Pravidla",
-    ["Roll the dice automatically"] = "Házet kostkami automaticky",
     [ [[Each player has 15 checkers and moves them around the board by the numbers rolled on two dice, towards their home board (points 1–6, bottom right). Doubles are played four times. Both dice must be used when possible; when only one can be used, it must be the larger one if it can be played.
 
 A checker may land on a point with at most one opposing checker; that checker is hit and goes to the bar. Checkers on the bar must enter the opponent's home board before any other move.

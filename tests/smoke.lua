@@ -407,17 +407,6 @@ eq(got, Rules.BAR, "the bar")
 screen.board:onTapBoard(nil, { pos = { x = 5 + 13 * u + 2, y = 7 + 9 * u } })
 eq(got, Rules.OFF, "the tray")
 
--- with automatic rolling, the dice are rolled when the opponent's move arrives
-item("auto_roll").callback()
-eq(item("auto_roll").checked_func(), true, "automatic rolling on")
-local guest_move
-guest_move = guest_moves(t.state, 3, 1)
-client.incoming = { guest_move }
-tick()
-eq(client.sent:match("ROLL %d %d\n$") ~= nil, true, "rolled automatically")
-eq(buttons(screen).Done ~= nil, true, "the dice are to be played")
-item("auto_roll").callback()
-
 -- the opponent leaves
 client.incoming = { "BYE\n" }
 tick()
@@ -475,19 +464,19 @@ local sock = tcps[#tcps]
 eq(sock.sent, "HELLO 2 Martin\n", "guest says hello")
 screen = shown[#shown]
 eq(status_of(screen):match("Connecting…$") ~= nil, true, "guest waits for WELCOME")
-local plugin_auto = item("auto_roll")
-plugin_auto.callback() -- the guest rolls automatically
 sock.incoming = { "WELCOME 2 Host\n" }
 tick()
 eq(screen.title_bar.subtitle, "Opponent: Host", "guest joined")
+eq(sock.sent:match("OPEN") == nil, true, "no opening die before Roll")
+buttons(screen).Roll.callback()
+animate()
 local od = tonumber(sock.sent:match("OPEN (%d)\n$"))
-eq(od ~= nil, true, "opening die rolled automatically")
+eq(od ~= nil, true, "guest's opening die rolled")
 local hostd = od % 6 + 1
 sock.incoming = { "OPEN " .. hostd .. "\n" }
 tick()
 eq(status_of(screen):match("Opening roll: you " .. od .. ", Host " .. hostd .. ". " .. (od > hostd and "You start." or "Host starts.")) ~= nil,
     true, "opening roll: " .. status_of(screen))
-plugin_auto.callback()
 eq(screen.board.color, "black", "guest plays black")
 eq(screen.board.position.points[1], -2, "guest's 24 is point 1")
 clock = clock + 6
