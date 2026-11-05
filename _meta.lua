@@ -3,7 +3,7 @@ local _ = require("gettext")
 local cs = (_.current_lang or ""):match("^cs") ~= nil
 return {
     name = "backgammonwifi",
-    version = "0.1.0",
+    version = "0.1.1",
     fullname = cs and "Vrchcáby" or _("Backgammon (Wi-Fi)"),
     description = cs and "Vrchcáby (backgammon) pro dva hráče, každý na své čtečce, přes Wi-Fi."
         or _([[Backgammon for two players, each on their own e-reader, over Wi-Fi.]]),

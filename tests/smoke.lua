@@ -282,6 +282,21 @@ if gd > hd then
     eq(status_of(screen):match("^Guest played ") ~= nil, true, "guest's moves shown: " .. status_of(screen))
 end
 
+-- the board's bottom edge: the same with and without buttons, at the screen's bottom
+local function board_bottom(scr)
+    local y = 0
+    for _i, child in ipairs(scr[1][1]) do
+        y = y + (child.getSize and child:getSize().h or child.width)
+        if child == scr.board then return y end
+    end
+end
+local function content_height(scr)
+    local y = 0
+    for _i, child in ipairs(scr[1][1]) do y = y + (child.getSize and child:getSize().h or child.width) end
+    return y
+end
+local bottom_with_buttons = board_bottom(screen)
+
 -- our turn: play with taps
 local board = screen.board
 eq(board.dice.mine and board.on_tap ~= nil, true, "our dice, the board is tappable")
@@ -315,6 +330,9 @@ eq(status_of(screen):match("All dice played") ~= nil, true, "all dice played")
 buttons(screen).Done.callback()
 eq(client.sent:match("MOVE " .. table.concat(t:encode(), " "):gsub("%-", "%%-") .. "\n$") ~= nil, true, "moves sent: " .. client.sent)
 eq(screen.board.on_tap, nil, "not our turn any more")
+eq(buttons(screen).Done, nil, "no buttons while the opponent plays")
+eq(board_bottom(screen), bottom_with_buttons, "the board stays where it was")
+eq(content_height(screen), 800, "the screen is filled to the bottom")
 eq(status_of(screen), "Guest is rolling…\nPips: you " .. Rules.pips(t.state, "white") .. ", Guest " .. Rules.pips(t.state, "black"),
     "waiting for the guest")
 client.incoming = { "ROLL 3 1\n" }

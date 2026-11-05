@@ -504,16 +504,26 @@ function GameScreen:build()
         end
         if from == Rules.BAR then self.selected = from end
     end
+    local status_face = Font:getFace("cfont", 18)
     local status = TextBoxWidget:new{
         text = self:statusText(),
-        face = Font:getFace("cfont", 18),
+        face = status_face,
         width = inner_w,
         alignment = "center",
     }
     local row = self:buttonRow()
     local buttons = row and ButtonTable:new{ width = inner_w, buttons = { row }, show_parent = self }
-    local used = self.title_bar:getSize().h + status:getSize().h + 3 * pad
-        + (buttons and buttons:getSize().h + pad or 0)
+    -- The board sits at the bottom, above the buttons' place (kept while there
+    -- are none), and its size doesn't depend on the status text: it stays put
+    -- while status lines come and go.
+    if not self.reserved or self.reserved.w ~= inner_w then
+        local lines = TextBoxWidget:new{ text = "\n\n\n", face = status_face, width = inner_w }
+        local sample = ButtonTable:new{ width = inner_w, buttons = { { { text = "x" } } }, show_parent = self }
+        self.reserved = { w = inner_w, status = lines:getSize().h, buttons = sample:getSize().h }
+        lines:free()
+    end
+    local title_h = self.title_bar:getSize().h
+    local board_h = h - title_h - self.reserved.status - self.reserved.buttons - 4 * pad
 
     local dice
     if m:my_turn() then
@@ -535,7 +545,7 @@ function GameScreen:build()
     end
     local board = BoardWidget:new{
         width = inner_w,
-        height = h - used,
+        height = board_h,
         color = m.color,
         position = m:shown(),
         selected = self.selected,
@@ -546,16 +556,18 @@ function GameScreen:build()
     }
     self.board = board
 
+    local below = buttons and buttons:getSize().h or self.reserved.buttons
+    local free = h - title_h - status:getSize().h - board:getSize().h - below - 2 * pad
     local content = VerticalGroup:new{
         align = "center",
         self.title_bar,
         VerticalSpan:new{ width = pad },
         status,
-        VerticalSpan:new{ width = pad },
+        VerticalSpan:new{ width = math.max(pad, free) },
         board,
         VerticalSpan:new{ width = pad },
+        buttons or VerticalSpan:new{ width = below },
     }
-    if buttons then table.insert(content, buttons) end
     self[1] = FrameContainer:new{
         width = w,
         height = h,
