@@ -158,7 +158,8 @@ local font_sizes = {} -- unit → label font size
 -- position: Rules position; selected: the player's point whose checker is
 -- picked up; targets: { [point] = true } where it can go (Rules.OFF too);
 -- landed: { [point] = true } where the opponent's last moves ended;
--- dice = { values, used = { [i] = true }, mine = bool }; on_tap(point).
+-- dice = { mine = { values, used = { [i] = true } }, peer = { values } } (either
+-- may be missing); on_tap(point).
 local BoardWidget = InputContainer:extend{
     width = nil,
     height = nil,
@@ -326,12 +327,13 @@ function BoardWidget:paintTo(bb, x, y)
     bb:paintBorder(ox, y_top, u, 11 * u, w, Blitbuffer.COLOR_BLACK)
 
     -- dice in the middle: own on the right half, the opponent's on the left
-    if self.dice then
-        local values = self.dice.values
-        local cx0 = x + (self.dice.mine and 10 or 3) * u
-        local first = cx0 - math.floor((#values - 1) * u / 2)
-        for i, v in ipairs(values) do
-            self:paintDie(bb, first + (i - 1) * u, y_mid + half, v, self.dice.used and self.dice.used[i])
+    for side, center in pairs({ mine = 10, peer = 3 }) do
+        local d = self.dice and self.dice[side]
+        if d then
+            local first = x + center * u - math.floor((#d.values - 1) * u / 2)
+            for i, v in ipairs(d.values) do
+                self:paintDie(bb, first + (i - 1) * u, y_mid + half, v, d.used and d.used[i])
+            end
         end
     end
 end
@@ -388,8 +390,19 @@ function GameScreen:statusText()
         else
             lines[#lines + 1] = _("Connecting…")
         end
+    elseif self.rolling then
+        lines[#lines + 1] = _("Rolling…")
+    elseif m.phase == "opening" then
+        if m.peer_open then lines[#lines + 1] = T(_("%1 rolled %2."), m.peer, m.peer_open) end
+        if m:needs_opening_roll() then
+            lines[#lines + 1] = _("Opening roll: tap Roll or the board. The higher die starts.")
+        else
+            lines[#lines + 1] = T(_("You rolled %1. Waiting for %2…"), m.my_open, m.peer)
+        end
     elseif m.phase == "playing" then
-        if m:my_turn() then
+        if m:needs_roll() then
+            lines[#lines + 1] = _("Your turn: tap Roll or the board to roll the dice.")
+        elseif m:my_turn() then
             local t = m.current
             if t.max == 0 then
                 lines[#lines + 1] = T(_("You rolled %1: no move possible. Tap Done."), dice_text(m.dice))
@@ -422,7 +435,11 @@ function GameScreen:buttonRow()
     local m = game.match
     local close = { text = _("Close"), callback = function() self:onClose() end }
     if game.lost then return { close } end
-    if m:my_turn() then
+    if m:needs_roll() or m:needs_opening_roll() then
+        return {
+            { text = _("Roll"), enabled = not self.rolling, callback = function() self:rollDice() end },
+        }
+    elseif m:my_turn() then
         return {
             { text = _("Undo"), enabled = #m.current.played > 0, callback = function()
                 m:undo()
@@ -525,16 +542,23 @@ function GameScreen:build()
     local title_h = self.title_bar:getSize().h
     local board_h = h - title_h - self.reserved.status - self.reserved.buttons - 4 * pad
 
-    local dice
-    if m:my_turn() then
+    local dice = {}
+    if self.rolling then
+        dice.mine = { values = self.rolling }
+    elseif m:my_turn() then
         local left, used_dice = {}, {}
         for _i, d in ipairs(m.current.dice) do left[d] = (left[d] or 0) + 1 end
         for i, d in ipairs(m.current.all) do
             if (left[d] or 0) > 0 then left[d] = left[d] - 1 else used_dice[i] = true end
         end
-        dice = { values = m.current.all, used = used_dice, mine = true }
-    elseif m.phase == "playing" and m.dice then
-        dice = { values = m.dice, mine = false }
+        dice.mine = { values = m.current.all, used = used_dice }
+    elseif m.phase == "opening" and m.my_open then
+        dice.mine = { values = { m.my_open } }
+    end
+    if m.phase == "opening" and m.peer_open then
+        dice.peer = { values = { m.peer_open } }
+    elseif m.phase == "playing" and m.turn == "peer" and m.dice then
+        dice.peer = { values = m.dice }
     end
     local landed
     if m.last_peer_moves then
@@ -552,7 +576,8 @@ function GameScreen:build()
         targets = self:targets(),
         landed = landed,
         dice = dice,
-        on_tap = m:my_turn() and not game.lost and function(point) self:onPointTap(point) end or nil,
+        on_tap = not game.lost and (m:my_turn() and function(point) self:onPointTap(point) end
+            or (m:needs_roll() or m:needs_opening_roll()) and function() self:rollDice() end) or nil,
     }
     self.board = board
 
@@ -577,6 +602,48 @@ function GameScreen:build()
         background = Blitbuffer.COLOR_WHITE,
         content,
     }
+end
+
+local ROLL_FRAMES = 6       -- dice shown before the real roll
+local ROLL_FRAME_TIME = 0.12 -- seconds
+
+--- Rolls my dice (or my opening die) with a short animation: a few random
+-- faces, then the roll.
+function GameScreen:rollDice()
+    local m = game.match
+    local opening = m:needs_opening_roll()
+    local function needed()
+        if opening then return m:needs_opening_roll() end
+        return m:needs_roll()
+    end
+    if self.rolling or not needed() then return end
+    local frame = 0
+    local function step()
+        if game.screen ~= self or game.match ~= m or not needed() then
+            self.rolling = nil -- the game ended meanwhile
+            return
+        end
+        frame = frame + 1
+        if frame > ROLL_FRAMES then
+            self.rolling = nil
+            local ev
+            if opening then ev = m:roll_opening() else ev = m:roll() end
+            if ev then Backgammon.onGameEvent(ev) end
+            return
+        end
+        self.rolling = opening and { math.random(6) } or { math.random(6), math.random(6) }
+        if frame == 1 then
+            self:update() -- status and buttons change too
+        else
+            -- the board doesn't move (see build()): refresh just its old place, quickly
+            local region = self.board.dimen
+            region = Geom:new{ x = region.x, y = region.y, w = region.w, h = region.h }
+            self:build()
+            UIManager:setDirty(self, "fast", region)
+        end
+        UIManager:scheduleIn(ROLL_FRAME_TIME, step)
+    end
+    step()
 end
 
 function GameScreen:update()
@@ -664,11 +731,10 @@ function Backgammon.onGameEvent(ev)
     if t == "joined" then
         game.message = game.role == "host" and T(_("%1 joined the game."), ev.name)
             or T(_("You joined %1's game."), ev.name)
-        if ev.start then
-            local joined = game.message
-            Backgammon.onGameEvent(ev.start)
-            game.message = joined .. "\n" .. game.message
-        end
+    elseif t == "opening" then
+        if ev.mine then game.message = nil end
+    elseif t == "opening_tie" then
+        game.message = T(_("Both rolled %1: roll again."), ev.die)
     elseif t == "start" then
         local mine, theirs = ev.host_die, ev.guest_die
         if game.role == "guest" then mine, theirs = theirs, mine end
@@ -682,6 +748,7 @@ function Backgammon.onGameEvent(ev)
         for _i, mv in ipairs(ev.moves) do if mv.hit then hits = hits + 1 end end
         if hits > 0 then text = text .. " " .. T(_("Your checkers hit: %1."), hits) end
         game.message = text
+        if game.auto_roll then m:roll() end
     elseif t == "played" then
         game.message = nil
     elseif t == "rematch" then
@@ -691,6 +758,12 @@ function Backgammon.onGameEvent(ev)
         return
     end
     if game.screen then game.screen:update() end
+    -- a new opening roll: rolled at once with automatic rolling
+    if (t == "joined" or t == "rematch" or t == "opening_tie") and game.auto_roll
+        and m:needs_opening_roll() then
+        local opened = m:roll_opening()
+        if opened then Backgammon.onGameEvent(opened) end
+    end
 end
 
 local function poll_game()
@@ -736,6 +809,7 @@ end
 function Backgammon:startGame(role, fields)
     game = fields
     game.role = role
+    game.auto_roll = self.settings:isTrue("auto_roll")
     game.match = Match.new{
         role = role,
         name = self:playerName(),
@@ -943,6 +1017,13 @@ function Backgammon:mainMenu()
         { text_func = function() return T(_("Your name: %1"), self:playerName()) end, backgammonwifi_item = "name",
             keep_menu_open = true,
             callback = function(touchmenu_instance) self:editName(touchmenu_instance) end },
+        { text = _("Roll the dice automatically"), backgammonwifi_item = "auto_roll", keep_menu_open = true,
+            checked_func = function() return self.settings:isTrue("auto_roll") end,
+            callback = function()
+                self.settings:flipNilOrFalse("auto_roll")
+                self.settings:flush()
+                game.auto_roll = self.settings:isTrue("auto_roll")
+            end },
         { text = _("Rules"), backgammonwifi_item = "rules", keep_menu_open = true,
             callback = function() self:showRules() end },
     }

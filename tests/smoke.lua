@@ -77,6 +77,7 @@ stub("ui/network/manager", { runWhenOnline = function(_, cb) cb() end })
 local clock = 0
 stub("ui/time", { now = function() return clock end, to_s = function(t) return t end })
 local zmqs, standby, closed = {}, 0, {}
+local scheduled, dirty = {}, {}
 local last_close_refresh
 stub("ui/uimanager", {
     show = function(_, w) table.insert(shown, w) end,
@@ -86,8 +87,9 @@ stub("ui/uimanager", {
         if w and w.onCloseWidget then w:onCloseWidget() end
     end,
     forceRePaint = function() end,
-    setDirty = function() end,
+    setDirty = function(_, w, kind, region) table.insert(dirty, { kind = kind, region = region }) end,
     insertZMQ = function(_, z) table.insert(zmqs, z); return z end,
+    scheduleIn = function(_, _s, fn) table.insert(scheduled, fn) end,
     removeZMQ = function(_, z) for i = #zmqs, 1, -1 do if zmqs[i] == z then table.remove(zmqs, i) end end end,
     preventStandby = function() standby = standby + 1 end,
     allowStandby = function() standby = standby - 1 end,
@@ -97,6 +99,8 @@ stub("luasettings", { open = function()
     return {
         readSetting = function(_, k) return data[k] end,
         saveSetting = function(_, k, v) data[k] = v end,
+        isTrue = function(_, k) return data[k] == true end,
+        flipNilOrFalse = function(_, k) if data[k] then data[k] = nil else data[k] = true end end,
         flush = function() end,
     }
 end })
@@ -242,19 +246,49 @@ eq(buttons(screen).Done, nil, "no buttons while waiting")
 
 -- discovery answered while waiting
 local hudp = udp_on(7542)
-hudp.inbox = { { "DISCOVER 1", "192.168.1.30", 7543 } }
+hudp.inbox = { { "DISCOVER 2", "192.168.1.30", 7543 } }
 tick()
-eq(hudp.out[1] and hudp.out[1][1], "GAME 1 7541 Martin", "discovery answered")
+eq(hudp.out[1] and hudp.out[1][1], "GAME 2 7541 Martin", "discovery answered")
 
--- a guest joins: the game starts at once
-local client = fake_tcp({ "HELLO 1 Guest\n" })
+-- runs the roll animation; returns the number of frames
+local function animate()
+    local frames = 0
+    while #scheduled > 0 do
+        table.remove(scheduled, 1)()
+        frames = frames + 1
+    end
+    return frames
+end
+
+-- a guest joins: the opening roll
+local client = fake_tcp({ "HELLO 2 Guest\n" })
 table.insert(pending_clients, client)
 tick(2)
-eq(client.sent:match("^WELCOME 1 Martin\nSTART %d %d\n$") ~= nil, true, "host welcomes the guest and rolls: " .. client.sent)
+eq(client.sent, "WELCOME 2 Martin\n", "host welcomes the guest")
 eq(screen.title_bar.subtitle, "Opponent: Guest", "opponent shown")
-local hd, gd = client.sent:match("START (%d) (%d)")
-hd, gd = tonumber(hd), tonumber(gd)
-eq(status_of(screen):match("^Guest joined the game.\nOpening roll: you " .. hd .. ", Guest " .. gd) ~= nil, true,
+eq(status_of(screen), "Guest joined the game.\nOpening roll: tap Roll or the board. The higher die starts.",
+    "opening roll asked for")
+client.incoming = { "OPEN 4\n" }
+tick()
+eq(status_of(screen):match("\nGuest rolled 4.\nOpening roll") ~= nil, true, "the guest's opening die: " .. status_of(screen))
+eq(screen.board.dice.peer.values[1], 4, "shown on the left")
+eq(paint(screen.board) > 100, true, "board with the opening die painted")
+buttons(screen).Roll.callback()
+eq(#screen.board.dice.mine.values, 1, "one die rolls")
+eq(animate(), 6, "opening roll animated")
+local hd = tonumber(client.sent:match("OPEN (%d)\n$"))
+eq(hd ~= nil, true, "opening die sent")
+local gd = 4
+if hd == 4 then
+    eq(status_of(screen):match("^Both rolled 4: roll again.\nOpening roll") ~= nil, true, "a tie: " .. status_of(screen))
+    screen.board.on_tap(3) -- a tap on the board rolls too
+    animate()
+    hd = tonumber(client.sent:match("OPEN (%d)\n$"))
+    gd = (hd % 6) + 1 -- higher, or 1 against a 6
+    client.incoming = { "OPEN " .. gd .. "\n" }
+    tick()
+end
+eq(status_of(screen):match("Opening roll: you " .. hd .. ", Guest " .. gd .. "%.") ~= nil, true,
     "opening roll shown: " .. status_of(screen))
 -- a third device is turned away
 local extra = fake_tcp()
@@ -273,13 +307,23 @@ local function guest_moves(position, d1, d2)
 end
 local position = Rules.new()
 if gd > hd then
-    eq(screen.board.dice.mine, false, "the guest's opening dice shown")
+    eq(screen.board.dice.mine == nil and screen.board.dice.peer ~= nil, true, "the guest's opening dice shown")
     local line
     line, position = guest_moves(position, gd, hd)
     client.incoming = { line }
     tick()
-    eq(client.sent:match("ROLL %d %d\n$") ~= nil, true, "host rolls when its turn begins")
-    eq(status_of(screen):match("^Guest played ") ~= nil, true, "guest's moves shown: " .. status_of(screen))
+    eq(client.sent:match("ROLL"), nil, "the host's dice wait for a roll")
+    eq(status_of(screen):match("^Guest played .*\nYour turn: tap Roll") ~= nil, true, "guest's moves shown: " .. status_of(screen))
+    eq(buttons(screen).Roll.enabled, true, "Roll button")
+    paint(screen.board)
+    screen.board.on_tap(5) -- a tap on the board rolls too
+    eq(status_of(screen):match("Rolling…") ~= nil, true, "rolling")
+    eq(buttons(screen).Roll.enabled, false, "no second roll while rolling")
+    eq(#screen.board.dice.mine.values, 2, "rolling dice shown")
+    eq(animate(), 6, "a few animation frames")
+    eq(dirty[#dirty - 1].kind .. " " .. dirty[#dirty - 1].region.h, "fast " .. screen.board.dimen.h, "frames refresh the board quickly")
+    eq(client.sent:match("ROLL %d %d\n$") ~= nil, true, "ROLL sent after the animation")
+    eq(buttons(screen).Done ~= nil, true, "then the dice are played")
 end
 
 -- the board's bottom edge: the same with and without buttons, at the screen's bottom
@@ -299,10 +343,10 @@ local bottom_with_buttons = board_bottom(screen)
 
 -- our turn: play with taps
 local board = screen.board
-eq(board.dice.mine and board.on_tap ~= nil, true, "our dice, the board is tappable")
+eq(board.dice.mine ~= nil and board.on_tap ~= nil, true, "our dice, the board is tappable")
 eq(buttons(screen).Done.enabled, false, "Done only after playing the dice")
 eq(buttons(screen).Undo.enabled, false, "nothing to undo")
-local d = board.dice.values
+local d = board.dice.mine.values
 local t = Rules.turn(position, "white", d[1], d[2])
 local mv = t:moves()[1]
 screen.board.on_tap(mv.from)
@@ -315,7 +359,7 @@ screen.board.on_tap(mv.from)
 screen.board.on_tap(mv.to)
 eq(screen.selected, nil, "checker moved")
 eq(buttons(screen).Undo.enabled, true, "Undo after a move")
-eq(next(screen.board.dice.used) ~= nil, true, "the used die is greyed")
+eq(next(screen.board.dice.mine.used) ~= nil, true, "the used die is greyed")
 buttons(screen).Undo.callback()
 eq(buttons(screen).Undo.enabled, false, "move taken back")
 -- play the whole turn
@@ -338,7 +382,7 @@ eq(status_of(screen), "Guest is rolling…\nPips: you " .. Rules.pips(t.state, "
 client.incoming = { "ROLL 3 1\n" }
 tick()
 eq(status_of(screen):match("^Guest is playing 3–1") ~= nil, true, "the guest's dice shown")
-eq(screen.board.dice.mine, false, "on the left")
+eq(screen.board.dice.mine == nil and screen.board.dice.peer ~= nil, true, "on the left")
 
 -- taps on the painted board map to points
 paint(screen.board)
@@ -353,6 +397,17 @@ screen.board:onTapBoard(nil, { pos = { x = 5 + 6 * u + 2, y = 7 + 2 * u } })
 eq(got, Rules.BAR, "the bar")
 screen.board:onTapBoard(nil, { pos = { x = 5 + 13 * u + 2, y = 7 + 9 * u } })
 eq(got, Rules.OFF, "the tray")
+
+-- with automatic rolling, the dice are rolled when the opponent's move arrives
+item("auto_roll").callback()
+eq(item("auto_roll").checked_func(), true, "automatic rolling on")
+local guest_move
+guest_move = guest_moves(t.state, 3, 1)
+client.incoming = { guest_move }
+tick()
+eq(client.sent:match("ROLL %d %d\n$") ~= nil, true, "rolled automatically")
+eq(buttons(screen).Done ~= nil, true, "the dice are to be played")
+item("auto_roll").callback()
 
 -- the opponent leaves
 client.incoming = { "BYE\n" }
@@ -379,7 +434,7 @@ client.incoming = { "CLOSE" }
 tick()
 eq(screen.title_bar.subtitle, nil, "still waiting for an opponent")
 hudp = udp_on(7542)
-hudp.inbox = { { "DISCOVER 1", "192.168.1.31", 7543 } }
+hudp.inbox = { { "DISCOVER 2", "192.168.1.31", 7543 } }
 tick()
 eq(#hudp.out, 1, "discovery answered again")
 -- protocol error
@@ -408,13 +463,22 @@ dialog.text_value = "10.0.0.9:7000"
 dialog.buttons[1][2].callback()
 eq(connect_to, "10.0.0.9:7000", "connects to the address")
 local sock = tcps[#tcps]
-eq(sock.sent, "HELLO 1 Martin\n", "guest says hello")
+eq(sock.sent, "HELLO 2 Martin\n", "guest says hello")
 screen = shown[#shown]
 eq(status_of(screen):match("Connecting…$") ~= nil, true, "guest waits for WELCOME")
-sock.incoming = { "WELCOME 1 Host\nSTART 2 5\n" }
+local plugin_auto = item("auto_roll")
+plugin_auto.callback() -- the guest rolls automatically
+sock.incoming = { "WELCOME 2 Host\n" }
 tick()
 eq(screen.title_bar.subtitle, "Opponent: Host", "guest joined")
-eq(status_of(screen):match("Opening roll: you 5, Host 2. You start.") ~= nil, true, "guest starts: " .. status_of(screen))
+local od = tonumber(sock.sent:match("OPEN (%d)\n$"))
+eq(od ~= nil, true, "opening die rolled automatically")
+local hostd = od % 6 + 1
+sock.incoming = { "OPEN " .. hostd .. "\n" }
+tick()
+eq(status_of(screen):match("Opening roll: you " .. od .. ", Host " .. hostd .. ". " .. (od > hostd and "You start." or "Host starts.")) ~= nil,
+    true, "opening roll: " .. status_of(screen))
+plugin_auto.callback()
 eq(screen.board.color, "black", "guest plays black")
 eq(screen.board.position.points[1], -2, "guest's 24 is point 1")
 clock = clock + 6
@@ -434,14 +498,14 @@ eq(#zmqs, 1, "search polled")
 local sudp = udp_on(7543)
 tick()
 eq(#sudp.out, 2, "DISCOVER broadcast")
-sudp.inbox = { { "GAME 1 7541 Host", "192.168.1.40", 7542 } }
+sudp.inbox = { { "GAME 2 7541 Host", "192.168.1.40", 7542 } }
 tick()
 eq(menu.item_table[1].text .. " " .. menu.item_table[1].mandatory, "Host 192.168.1.40", "game listed")
 eq(menu.item_table[2].text, "Join by address…", "join by address below")
 clock = clock + 10
 tick()
 eq(menu.item_table[1].text, "Searching for games…", "silent game dropped")
-sudp.inbox = { { "GAME 1 7541 Host", "192.168.1.40", 7542 } }
+sudp.inbox = { { "GAME 2 7541 Host", "192.168.1.40", 7542 } }
 tick()
 menu.item_table[1].callback()
 eq(sudp.closed, true, "search stopped when the list closes")

@@ -13,6 +13,7 @@ return {
     ["Player"] = "Hráč",
     ["Save"] = "Uložit",
     ["Rules"] = "Pravidla",
+    ["Roll the dice automatically"] = "Házet kostkami automaticky",
     [ [[Each player has 15 checkers and moves them around the board by the numbers rolled on two dice, towards their home board (points 1–6, bottom right). Doubles are played four times. Both dice must be used when possible; when only one can be used, it must be the larger one if it can be played.
 
 A checker may land on a point with at most one opposing checker; that checker is hit and goes to the bar. Checkers on the bar must enter the opponent's home board before any other move.
@@ -61,6 +62,13 @@ Obě zařízení musí být ve stejné síti Wi-Fi. Jeden hráč hru založí, d
     ["%1 wants to play again."] = "%1 chce hrát znovu.",
     ["Close"] = "Zavřít",
     ["Undo"] = "Zpět",
+    ["Roll"] = "Hodit",
+    ["%1 rolled %2."] = "%1 hází %2.",
+    ["Opening roll: tap Roll or the board. The higher die starts."] = "Úvodní hod: klepněte na Hodit nebo na desku. Začíná vyšší kostka.",
+    ["You rolled %1. Waiting for %2…"] = "Hodili jste %1. Čeká se na hráče %2…",
+    ["Both rolled %1: roll again."] = "Oba hody jsou %1: házejte znovu.",
+    ["Rolling…"] = "Hází se…",
+    ["Your turn: tap Roll or the board to roll the dice."] = "Jste na tahu: hoďte kostkami tlačítkem Hodit nebo klepnutím na desku.",
     ["Done"] = "Hotovo",
     ["Play again"] = "Hrát znovu",
     ["The checker cannot move there."] = "Kámen tam táhnout nemůže.",

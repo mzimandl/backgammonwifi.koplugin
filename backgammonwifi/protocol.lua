@@ -4,8 +4,8 @@ Wire format. Pure Lua: no KOReader modules.
 TCP: one message per line ("\n"), words separated by spaces. A player name is
 the rest of its line. Guest → host first: HELLO <version> <name>; the host
 answers WELCOME <version> <name>, or ERROR <reason> and closes.
-Then: START <host die> <guest die> (host only: the opening roll, the higher die
-starts and plays both), ROLL <d1> <d2> (the player whose turn begins),
+Then: OPEN <die> (each player's opening die; the higher one starts and plays
+both, equal ones are rolled again), ROLL <d1> <d2> (the player whose turn begins),
 MOVE [from/die ...] (the moves of that turn, from the mover's side: points
 24..1, bar 25; die = the die used), REMATCH, PING, BYE.
 
@@ -15,7 +15,7 @@ the host waiting for an opponent answers GAME <version> <tcp port> <name>.
 
 local M = {}
 
-M.VERSION = 1
+M.VERSION = 2 -- 2: OPEN (each player rolls their opening die) replaced START
 M.PORT = 7541           -- TCP, host
 M.DISCOVERY_PORT = 7542 -- UDP, host listens
 M.SEARCH_PORT = 7543    -- UDP, guest listens for answers

@@ -12,7 +12,8 @@ Both devices must be on the same Wi-Fi network. In the menu: **Tools → Backgam
 
 ### Rules
 - Each player has 15 checkers. The host plays white, the guest black. Each player sees the board from their own side: their home board (points 1–6) bottom right, checkers moving counter-clockwise towards it.
-- The game starts as soon as the guest joins: the host's device rolls one die for each player, the higher one starts and plays both dice. After that each device rolls for its own player when their turn begins.
+- The game starts with the opening roll as soon as the guest joins: each player rolls one die, the higher one starts and plays both dice; equal dice are rolled again. After that each player rolls their own dice when their turn begins. **Roll** (or a tap on the board) shows a short animation and then the roll. **Roll the dice automatically** in the menu skips that and rolls as soon as the opening roll or the turn begins (each player chooses for themselves).
+- Both devices need version 0.2.0 or newer (the opening roll changed the protocol; older versions don't find or join newer games).
 - Doubles are played four times. Both dice must be used when possible; when only one can be used, it must be the larger one if it can be played. The game enforces this: only legal moves can be made.
 - A point with two or more opposing checkers is blocked. A single opposing checker is hit and goes to the bar; checkers on the bar must enter the opponent's home board before any other move.
 - Once all 15 checkers are in the home board they are borne off; a higher die than needed bears off from the highest occupied point. Whoever bears off all their checkers first wins. **Play again** starts a new game once both players tap it; the subtitle counts the games won.

@@ -163,11 +163,26 @@ local function pair(seed)
     return host, guest, deliver, events
 end
 
+-- both players roll their opening dice until one is higher
+local function opening(a, z, deliver_fn)
+    for _round = 1, 50 do
+        if a.phase ~= "opening" then break end
+        a:roll_opening()
+        z:roll_opening()
+        deliver_fn()
+    end
+end
+
 -- plays random legal moves until the game ends
 local function play(a, z, deliver_fn, pick)
+    opening(a, z, deliver_fn)
     for _step = 1, 2000 do
         if a.phase ~= "playing" then break end
-        local p = a:my_turn() and a or z
+        local p = (a:my_turn() or a:needs_roll()) and a or z
+        if p:needs_roll() then
+            p:roll()
+            deliver_fn()
+        end
         while not p.current:done() do
             local ms = p.current:moves()
             local m = ms[pick(#ms)]
@@ -180,12 +195,33 @@ end
 
 local host, guest, deliver, events = pair(7)
 eq(host.phase .. host.color .. guest.color, "waitingwhiteblack", "host plays white")
-eq(host:start(), nil, "no start without an opponent")
+eq(host:roll_opening(), nil, "no opening roll without an opponent")
 guest:hello()
 deliver()
 eq(host.peer .. "/" .. guest.peer, "Guest/Host", "names exchanged")
-eq(host.phase .. guest.phase, "playingplaying", "the game starts when the guest joins")
+eq(host.phase .. guest.phase, "openingopening", "the opening roll when the guest joins")
+eq(host:needs_opening_roll() and guest:needs_opening_roll(), true, "both roll their opening die")
+-- a tie: both roll again
+host.rand = function() return 4 end
+guest.rand = function() return 4 end
+eq(host:roll_opening().type, "opening", "host's opening die")
+eq(host:roll_opening(), nil, "one opening die per round")
+eq(guest:roll_opening().type, "opening", "guest's equal die (the host's isn't delivered yet)")
+deliver()
+eq(events.host[#events.host] .. events.guest[#events.guest], "opening_tieopening_tie", "both see the tie")
+eq(host:needs_opening_roll() and guest:needs_opening_roll(), true, "both roll again")
+host.rand, guest.rand = rng(7), rng(107)
+guest.rand = function() return 2 end
+eq(guest:roll_opening().type, "opening", "guest first this time")
+deliver()
+eq(events.host[#events.host] .. host.peer_open, "opening2", "host knows the guest's die")
+host.rand = function() return 5 end
+local ev = host:roll_opening()
+eq(ev.type .. ev.turn .. ev.host_die .. ev.guest_die, "startme52", "the higher die starts")
+deliver()
+eq(host.phase .. guest.phase, "playingplaying", "the game starts")
 eq(events.guest[#events.guest], "start", "guest: start event")
+host.rand, guest.rand = rng(7), rng(107)
 eq((host.turn == "me") ~= (guest.turn == "me"), true, "exactly one player's turn")
 local first = host:my_turn() and host or guest
 eq(first.dice[1] > first.dice[2], true, "the opening dice: higher first")
@@ -205,6 +241,8 @@ eq(host.phase, "over", "rematch needs both players")
 eq(events.host[#events.host], "rematch_request", "host: rematch request")
 host:request_rematch()
 deliver()
+eq(host.phase .. guest.phase, "openingopening", "rematch: a new opening roll")
+opening(host, guest, deliver)
 eq(host.phase .. guest.phase, "playingplaying", "rematch: a new game starts")
 eq(Rules.pips(host.position, "white"), 167, "rematch: starting position")
 eq(host.score.me + host.score.peer, 1, "rematch keeps the score")
@@ -214,6 +252,7 @@ host:request_rematch()
 deliver()
 guest:request_rematch()
 deliver()
+opening(host, guest, deliver)
 eq(host.phase .. guest.phase, "playingplaying", "rematch asked by the host first")
 eq(host.score.me + host.score.peer, 2, "two games played")
 
@@ -229,26 +268,39 @@ end
 -- protocol errors
 host, guest, deliver = pair(3)
 eq(select(2, guest:receive("MOVE 24/3")), "unexpected MOVE", "move before the game")
-eq(select(2, guest:receive("HELLO 1 x")), "unexpected HELLO", "guest doesn't take HELLO")
+eq(select(2, guest:receive("HELLO 2 x")), "unexpected HELLO", "guest doesn't take HELLO")
+eq(select(2, host:receive("HELLO 1 x")), "version", "version 1 (START) refused")
 eq(select(2, host:receive("HELLO 99 x")), "version", "other version refused")
 eq(host:receive("FUTURE stuff"), nil, "unknown commands are ignored")
 eq(select(2, host:receive("ERROR busy")), "busy", "ERROR ends the match")
-guest:receive("WELCOME 1 H")
-eq(select(2, guest:receive("START 3 3")), "bad START", "opening dice must differ")
-guest:receive("START 6 2")
+eq(select(2, guest:receive("OPEN 3")), "unexpected OPEN", "no opening roll before joining")
+guest:receive("WELCOME 2 H")
+eq(select(2, guest:receive("OPEN 7")), "bad OPEN", "not a die")
+guest:receive("OPEN 6")
+eq(select(2, guest:receive("OPEN 5")), "unexpected OPEN", "one opening die per round")
+guest.rand = function() return 2 end
+guest:roll_opening()
 eq(guest.turn .. guest.dice[1] .. guest.dice[2], "peer62", "host starts with 6-2")
 eq(select(2, guest:receive("ROLL 1 2")), "unexpected ROLL", "no roll on the opening turn")
 eq(select(2, guest:receive("MOVE 24/6")), "bad MOVE", "not all dice played")
 eq(select(2, guest:receive("MOVE 24/5 24/2")), "bad MOVE", "move onto a blocked point")
 eq(select(2, guest:receive("MOVE 24/6 24/6")), "bad MOVE", "die not rolled")
-local ev = guest:receive("MOVE 13/6 8/2")
+ev = guest:receive("MOVE 13/6 8/2")
 eq(ev.type .. #ev.moves .. guest.turn, "moved2me", "valid move: guest's turn")
-eq(guest.dice ~= nil and guest.current ~= nil, true, "guest rolled")
+eq(guest:needs_roll() and not guest:my_turn() and guest.dice == nil, true, "guest's dice still to be rolled")
+eq(guest:finish_turn() or guest:play(1, 1), nil, "no moves before the roll")
+local sent_roll
+guest.send_line = function(l) sent_roll = l end
+ev = guest:roll()
+eq(ev.type .. #ev.dice, "roll2", "guest rolls")
+eq(sent_roll, "ROLL " .. ev.dice[1] .. " " .. ev.dice[2] .. "\n", "ROLL sent")
+eq(guest:my_turn() and not guest:needs_roll(), true, "guest plays")
+eq(guest:roll(), nil, "only one roll per turn")
 eq(Rules.count(guest.position, "white", 7), 1, "the host's checker moved")
 
 -- the host's opponent leaves before the game
 host = Match.new{ role = "host", name = "H", send = function() end }
-host:receive("HELLO 1 G")
+host:receive("HELLO 2 G")
 host:drop_peer()
 eq(host.peer == nil and host.phase == "waiting", true, "drop_peer waits for another opponent")
 
@@ -321,10 +373,10 @@ local fake_socket = {
 local hst = Net.host(fake_socket, 7541)
 local hudp = udps[#udps]
 eq(hudp.port, Protocol.DISCOVERY_PORT, "host listens for discovery")
-hudp.inbox = { { "DISCOVER 1", "10.0.0.9", 7543 }, { "junk", "10.0.0.8", 1 } }
+hudp.inbox = { { "DISCOVER 2", "10.0.0.9", 7543 }, { "junk", "10.0.0.8", 1 } }
 hst:answer("Host")
-eq(#hudp.out .. " " .. hudp.out[1][1] .. " " .. hudp.out[1][2], "1 GAME 1 7541 Host 10.0.0.9", "host answers DISCOVER only")
-hudp.inbox = { { "DISCOVER 1", "10.0.0.9", 7543 } }
+eq(#hudp.out .. " " .. hudp.out[1][1] .. " " .. hudp.out[1][2], "1 GAME 2 7541 Host 10.0.0.9", "host answers DISCOVER only")
+hudp.inbox = { { "DISCOVER 2", "10.0.0.9", 7543 } }
 hst:answer(nil)
 eq(#hudp.out, 1, "no answers once the game is full")
 
@@ -333,7 +385,7 @@ local sudp = udps[#udps]
 eq(sudp.port, Protocol.SEARCH_PORT, "search listens on its port")
 search:send()
 eq(#sudp.out .. " " .. sudp.out[2][2], "2 10.0.0.255", "discover broadcast to both addresses")
-sudp.inbox = { { "GAME 1 7541 Host", "10.0.0.9", 7542 }, { "GAME 1 7541 Host", "10.0.0.9", 7542 } }
+sudp.inbox = { { "GAME 2 7541 Host", "10.0.0.9", 7542 }, { "GAME 2 7541 Host", "10.0.0.9", 7542 } }
 eq(search:poll(1), true, "found a game")
 eq(#search.games .. " " .. search.games[1].name .. " " .. search.games[1].ip, "1 Host 10.0.0.9", "one entry per host")
 eq(search:poll(2), false, "nothing new")
